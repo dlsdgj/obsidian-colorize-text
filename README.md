@@ -16,13 +16,12 @@
 2. 将文件放入您的Obsidian Vault的`.obsidian/plugins/colorize-text/`目录下
 3. 重启Obsidian
 4. 在Obsidian的插件设置中启用"Colorize Text"插件
-5. 设置快捷键
 
 ## 使用方法
 
 ### 基本高亮
 1. 选中您想要高亮的文本
-2. 按下快捷键
+2. 右键点击，选择"Colorize Text"选项
 3. 从调色板中选择一个颜色或使用AI生成的配色方案
 4. 点击应用，文本将立即高亮显示
 

@@ -1,0 +1,171 @@
+{
+  "markStyles": [
+    {
+      "class": "more-highlight yellow-highlighter",
+      "name": "黄色荧光笔"
+    },
+    {
+      "class": "more-highlight green-highlighter",
+      "name": "绿色荧光笔"
+    },
+    {
+      "class": "more-highlight blue-highlighter",
+      "name": "蓝色荧光笔"
+    },
+    {
+      "class": "more-highlight pink-highlighter",
+      "name": "粉色荧光笔"
+    },
+    {
+      "class": "more-highlight orange-highlighter",
+      "name": "橙色荧光笔"
+    },
+    {
+      "class": "more-highlight red-highlighter",
+      "name": "红色荧光笔"
+    },
+    {
+      "class": "more-highlight purple-highlighter",
+      "name": "紫色荧光笔"
+    },
+    {
+      "class": "more-highlight gray-highlighter",
+      "name": "灰色荧光笔"
+    },
+    
+    {
+      "class": "more-highlight-half yellow-highlighter",
+      "name": "黄色半划线"
+    },
+    {
+      "class": "more-highlight-half green-highlighter",
+      "name": "绿色半划线"
+    },
+    {
+      "class": "more-highlight-half blue-highlighter",
+      "name": "蓝色半划线"
+    },
+    {
+      "class": "more-highlight-half pink-highlighter",
+      "name": "粉色半划线"
+    },
+    {
+      "class": "more-highlight-half orange-highlighter",
+      "name": "橙色半划线"
+    },
+    {
+      "class": "more-highlight-half red-highlighter",
+      "name": "红色半划线"
+    },
+    {
+      "class": "more-highlight-half purple-highlighter",
+      "name": "紫色半划线"
+    },
+    {
+      "class": "more-highlight-half gray-highlighter",
+      "name": "灰色半划线"
+    },
+    
+    {
+      "class": "more-highlight-underline yellow-highlighter",
+      "name": "黄色波浪线"
+    },
+    {
+      "class": "more-highlight-underline green-highlighter",
+      "name": "绿色波浪线"
+    },
+    {
+      "class": "more-highlight-underline blue-highlighter",
+      "name": "蓝色波浪线"
+    },
+    {
+      "class": "more-highlight-underline pink-highlighter",
+      "name": "粉色波浪线"
+    },
+    {
+      "class": "more-highlight-underline orange-highlighter",
+      "name": "橙色波浪线"
+    },
+    {
+      "class": "more-highlight-underline red-highlighter",
+      "name": "红色波浪线"
+    },
+    {
+      "class": "more-highlight-underline purple-highlighter",
+      "name": "紫色波浪线"
+    },
+    {
+      "class": "more-highlight-underline gray-highlighter",
+      "name": "灰色波浪线"
+    },
+    
+    {
+      "class": "more-highlight-rainbow yellow-highlighter",
+      "name": "黄色彩虹线（悬停显示）"
+    },
+    {
+      "class": "more-highlight-rainbow green-highlighter",
+      "name": "绿色彩虹线（悬停显示）"
+    },
+    {
+      "class": "more-highlight-rainbow blue-highlighter",
+      "name": "蓝色彩虹线（悬停显示）"
+    },
+    {
+      "class": "more-highlight-rainbow pink-highlighter",
+      "name": "粉色彩虹线（悬停显示）"
+    },
+    {
+      "class": "more-highlight-rainbow orange-highlighter",
+      "name": "橙色彩虹线（悬停显示）"
+    },
+    {
+      "class": "more-highlight-rainbow red-highlighter",
+      "name": "红色彩虹线（悬停显示）"
+    },
+    {
+      "class": "more-highlight-rainbow purple-highlighter",
+      "name": "紫色彩虹线（悬停显示）"
+    },
+    {
+      "class": "more-highlight-rainbow gray-highlighter",
+      "name": "灰色彩虹线（悬停显示）"
+    },
+    
+    {
+      "class": "more-highlight-mask yellow-highlighter",
+      "name": "黄色模糊（悬停显示）"
+    },
+    {
+      "class": "more-highlight-mask green-highlighter",
+      "name": "绿色模糊（悬停显示）"
+    },
+    {
+      "class": "more-highlight-mask blue-highlighter",
+      "name": "蓝色模糊（悬停显示）"
+    },
+    {
+      "class": "more-highlight-mask pink-highlighter",
+      "name": "粉色模糊（悬停显示）"
+    },
+    {
+      "class": "more-highlight-mask orange-highlighter",
+      "name": "橙色模糊（悬停显示）"
+    },
+    {
+      "class": "more-highlight-mask red-highlighter",
+      "name": "红色模糊（悬停显示）"
+    },
+    {
+      "class": "more-highlight-mask purple-highlighter",
+      "name": "紫色模糊（悬停显示）"
+    },
+    {
+      "class": "more-highlight-mask gray-highlighter",
+      "name": "灰色模糊（悬停显示）"
+    }
+  ],
+  "lastSaved": "2025-09-18T18:44:36.693Z",
+  "version": "1.0.2",
+  "totalStyles": 40
+}

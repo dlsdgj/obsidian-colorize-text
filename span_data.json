@@ -1,0 +1,56 @@
+{
+  "palette": [
+    {
+      "textColor": "#E0FBFC",
+      "bgColor": "#EE6C4D"
+    },
+    {
+      "textColor": "#2C81A5",
+      "bgColor": "#7ED8A5"
+    },
+    {
+      "textColor": "#EE6C4D",
+      "bgColor": "#E0FBFC"
+    },
+    {
+      "textColor": "#DB6F91",
+      "bgColor": "#E8C9DC"
+    },
+    {
+      "textColor": "#990999",
+      "bgColor": "#D3F8B6"
+    },
+    {
+      "textColor": "#FFFFFF",
+      "bgColor": "#C86788"
+    },
+    {
+      "textColor": "#E3EAD0",
+      "bgColor": "#DB6F91"
+    },
+    {
+      "textColor": "#295B2C",
+      "bgColor": "#F7E079"
+    },
+    {
+      "textColor": "#8EFFFF",
+      "bgColor": "#468180"
+    },
+    {
+      "textColor": "#FFE160",
+      "bgColor": "#3D7AAA"
+    },
+    {
+      "textColor": "#F5CA00",
+      "bgColor": "#891D74"
+    },
+    {
+      "textColor": "#F5F176",
+      "bgColor": "#8E68EF"
+    },
+    {
+      "textColor": "#FFFFFF",
+      "bgColor": "#89BF3E"
+    }
+  ]
+}
