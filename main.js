@@ -307,6 +307,11 @@ module.exports = class ColorizeTextPlugin extends Plugin {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& 表示整个匹配的字符串
   }
   
+  // 独立的转义函数，用于事件处理等上下文可能变化的场景
+  static staticEscapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& 表示整个匹配的字符串
+  }
+  
   // 清理事件监听器和资源
   onunload() {
     console.log("ColorizeText 插件已卸载");
@@ -923,7 +928,13 @@ module.exports = class ColorizeTextPlugin extends Plugin {
           }
         } else {
           // 使用传统的span标签
-          wrapped = `<span style="color: ${selected.textColor}; background-color: ${selected.bgColor};">${selectedText}</span>`;
+          if (selected.fullStyle) {
+            // 如果提供了fullStyle，直接使用它
+            wrapped = `<span style="${selected.fullStyle}">${selectedText}</span>`;
+          } else {
+            // 否则使用传统的textColor和bgColor
+            wrapped = `<span style="color: ${selected.textColor}; background-color: ${selected.bgColor};">${selectedText}</span>`;
+          }
         }
         
         editor.replaceSelection(wrapped);
@@ -934,6 +945,11 @@ module.exports = class ColorizeTextPlugin extends Plugin {
           bgColor: selected.bgColor,
           time: Date.now()
         };
+        
+        // 如果提供了fullStyle，也保存到历史记录中
+        if (selected.fullStyle) {
+          newRecord.fullStyle = selected.fullStyle;
+        }
         
         // 如果是使用mark标签的高亮，同时保存markClass属性
         if (selected.useMarkTag && selected.markClass) {
@@ -2097,6 +2113,247 @@ class PaletteModal extends Modal {
       console.error("显示选中文字按钮失败:", error);
     }
 
+    // 添加边框样式标题
+    const borderTitle = document.createElement("div");
+    borderTitle.innerText = "border (单击应用到当前 右击应用到所有匹配)";
+    borderTitle.style.fontSize = "14px";
+    borderTitle.style.fontWeight = "bold";
+    borderTitle.style.marginTop = "12px";
+    borderTitle.style.marginBottom = "6px";
+    borderTitle.style.color = "#666";
+    contentEl.appendChild(borderTitle);
+    
+    // 边框样式容器
+    const borderStylesContainer = document.createElement("div");
+    borderStylesContainer.style.display = "flex";
+    borderStylesContainer.style.flexWrap = "wrap";
+    borderStylesContainer.style.gap = "4px";
+    borderStylesContainer.style.marginBottom = "8px";
+    
+    // 定义边框样式数据
+    const borderStyles = [
+      { style: "border:1px solid #B22222;", name: "火砖红" },
+      { style: "border:1px solid #FF6347;", name: "番茄红" },
+      { style: "border:1px solid #FF4500;", name: "橙红色" },
+      { style: "border:1px solid #32CD32;", name: "酸橙绿" },
+      { style: "border:1px solid #008080;", name: "青色" },
+      { style: "border:1px solid #4169E1;", name: "皇家蓝" },
+      { style: "border:1px solid #8A2BE2;", name: "紫罗兰" },
+      { style: "border:1px solid #FF1493;", name: "深粉红" },
+      { style: "border:1px solid #FFD700;", name: "金色" },
+      { style: "border:1px solid #808080;", name: "灰色" },
+      { style: "border:3px double purple;", name: "紫色" },
+      { style: "border:3px double #FF6347;", name: "番茄红" },
+      { style: "border:3px double #20B2AA;", name: "浅海绿" },
+      { style: "border:3px double #FF8C00;", name: "深橙色" },
+      { style: "border:3px double #9370DB;", name: "中紫色" },
+      { style: "border:3px double #DC143C;", name: "猩红色" },
+      { style: "border:3px double #00CED1;", name: "深青色" },
+      { style: "border:3px double #FFB6C1;", name: "浅粉红" },
+      { style: "border:1px solid black; box-shadow:0 0 5px red;", name: "发光红" },
+      { style: "border:1px solid black; box-shadow:0 0 4px blue;", name: "发光蓝" },
+      { style: "border:1px solid black; box-shadow:0 0 5px #00ff00;", name: "发光绿" },
+      { style: "border:1px solid black; box-shadow:0 0 6px #ff00ff;", name: "发光洋红" },
+      { style: "border:1px solid black; box-shadow:0 0 5px #ffff00;", name: "发光黄" },
+      { style: "border:1px solid black; box-shadow:0 0 5px #00ffff;", name: "发光青" },
+      { style: "border:1px solid black; box-shadow:0 0 6px #ff6600;", name: "发光橙" },
+      { style: "border:1px solid black; box-shadow:0 0 5px #9370DB;", name: "发光紫" },
+      { style: "border:1px solid black; box-shadow:0 0 8px #FFD700;", name: "发光金" },
+      { style: "border:1px solid transparent; border-image: linear-gradient(45deg, blue, pink, purple) 1;", name: "蓝粉紫" },
+      { style: "border:1px solid transparent; border-image: linear-gradient(45deg, #ff0000, #ffff00, #00ff00) 1;", name: "红黄绿" },
+      { style: "border:1px solid transparent; border-image: linear-gradient(45deg, #00d4ff, #7b68ee, #ff1493) 1;", name: "天蓝紫粉" },
+      { style: "border:1px solid transparent; border-image: linear-gradient(45deg, orange, red, purple) 1;", name: "橙红紫" },
+      { style: "border:1px solid transparent; border-image: linear-gradient(45deg, #00ff00, #00ffff, #0000ff) 1;", name: "绿青蓝" },
+      { style: "border:1px solid transparent; border-image: linear-gradient(45deg, gold, orange, red) 1;", name: "金橙红" },
+      { style: "border:1px solid transparent; border-image: linear-gradient(90deg, #e91e63, #9c27b0, #673ab7) 1;", name: "玫红紫系" },
+      { style: "border-bottom:3px solid blue;", name: "蓝色" },
+      { style: "border-bottom:3px solid #FF4500;", name: "橙红色" },
+      { style: "border-bottom:3px solid #32CD32;", name: "酸橙绿" },
+      { style: "border-bottom:3px solid #FF1493;", name: "深粉红" },
+      { style: "border-bottom:3px solid #9370DB;", name: "中紫色" },
+      { style: "border-bottom:3px solid #FFD700;", name: "金色" },
+      { style: "border-bottom:3px solid #00CED1;", name: "深青色" },
+      { style: "border-left:5px solid orange;", name: "橙色" },
+      { style: "border-left:5px solid #DC143C;", name: "猩红色" },
+      { style: "border-left:5px solid #20B2AA;", name: "浅海绿" },
+      { style: "border-left:5px solid #4169E1;", name: "皇家蓝" },
+      { style: "border-left:5px solid #9932CC;", name: "深兰花紫" },
+      { style: "border-left:5px solid #FF69B4;", name: "热粉红" },
+      { style: "border-left:5px solid #00FA9A;", name: "中春绿" },
+      { style: "border:1px solid red; border-radius:8px;", name: "红色" },
+      { style: "border:1px solid #4169E1; border-radius:8px;", name: "皇家蓝" },
+      { style: "border:1px solid #32CD32; border-radius:8px;", name: "酸橙绿" },
+      { style: "border:1px solid #FF8C00; border-radius:8px;", name: "深橙色" },
+      { style: "border:1px solid #9370DB; border-radius:8px;", name: "中紫色" },
+      { style: "border:1px solid #FF1493; border-radius:8px;", name: "深粉红" },
+      { style: "border:1px solid #00CED1; border-radius:8px;", name: "深青色" },
+      { style: "border:1px solid red; border-radius:20px;", name: "红色" },
+      { style: "border:1px solid #228B22; border-radius:20px;", name: "森林绿" },
+      { style: "border:1px solid #FF6347; border-radius:20px;", name: "番茄红" },
+      { style: "border:1px solid #8A2BE2; border-radius:20px;", name: "紫罗兰" },
+      { style: "border:1px solid #FFD700; border-radius:20px;", name: "金色" },
+      { style: "border:1px solid #00CED1; border-radius:20px;", name: "深青色" },
+      { style: "border:1px solid red; border-radius:50%;", name: "红色" },
+      { style: "border:1px solid #4169E1; border-radius:50%;", name: "皇家蓝" },
+      { style: "border:1px solid #32CD32; border-radius:50%;", name: "酸橙绿" },
+      { style: "border:1px solid #FF8C00; border-radius:50%;", name: "深橙色" },
+      { style: "border:1px solid #9370DB; border-radius:50%;", name: "中紫色" },
+      { style: "border:1px solid #FF1493; border-radius:50%;", name: "深粉红" },
+      { style: "border:1px dashed blue;", name: "蓝色" },
+      { style: "border:1px dashed #DC143C;", name: "猩红色" },
+      { style: "border:1px dashed #32CD32;", name: "酸橙绿" },
+      { style: "border:1px dashed #FF8C00;", name: "深橙色" },
+      { style: "border:1px dashed #8A2BE2;", name: "紫罗兰" },
+      { style: "border:1px dashed #FF1493;", name: "深粉红" },
+      { style: "border:1px dashed #00CED1;", name: "深青色" },
+      { style: "border:1px dashed #FFD700;", name: "金色" },
+      { style: "border:2px dotted green;", name: "绿色" },
+      { style: "border:2px dotted #FF6347;", name: "番茄红" },
+      { style: "border:2px dotted #4169E1;", name: "皇家蓝" },
+      { style: "border:2px dotted #FF8C00;", name: "深橙色" },
+      { style: "border:2px dotted #9370DB;", name: "中紫色" },
+      { style: "border:2px dotted #FF1493;", name: "深粉红" },
+      { style: "border:2px dotted #00CED1;", name: "深青色" },
+      { style: "border:2px dotted #FFD700;", name: "金色" }
+    ];
+    
+    // 渲染边框样式按钮
+    borderStyles.forEach((borderStyle, idx) => {
+      const btn = document.createElement("button");
+      btn.style.display = "inline-flex";
+      btn.style.alignItems = "center";
+      btn.style.justifyContent = "center";
+      btn.style.background = "transparent";
+      btn.style.border = "none";
+      btn.style.borderRadius = "4px";
+      btn.style.cursor = "pointer";
+      btn.style.padding = "0 8px";
+      btn.style.margin = "0";
+      btn.style.fontSize = "14px";
+      btn.title = borderStyle.name + " (点击应用)";
+      // 获取当前选中的文本，如果没有则显示"示例"
+      let displayText = "示例"; // 默认显示"示例"
+      if (this.app.workspace.activeLeaf && this.app.workspace.activeLeaf.view && this.app.workspace.activeLeaf.view.editor) {
+        const selectedText = this.app.workspace.activeLeaf.view.editor.getSelection();
+        if (selectedText && selectedText.trim().length > 0) {
+          displayText = selectedText;
+        }
+      }
+      
+      // 限制显示长度：最多3个汉字或6个英文字符
+      const truncateText = (text) => {
+        // 判断字符串是否主要包含汉字
+        const hasChinese = /[\u4e00-\u9fa5]/.test(text);
+        if (hasChinese) {
+          // 主要包含汉字，最多显示3个
+          return text.length > 3 ? text.substring(0, 3) + '...' : text;
+        } else {
+          // 主要包含英文，最多显示6个字符
+          return text.length > 6 ? text.substring(0, 6) + '...' : text;
+        }
+      };
+      
+      const truncatedText = truncateText(displayText);
+      btn.innerHTML = "<span style=\"" + borderStyle.style + "\">" + truncatedText + "</span>";
+      btn.style.height = "auto";
+      btn.style.minHeight = "22px";
+      btn.style.minWidth = "32px";
+      
+      // 点击事件：应用对应样式
+      btn.addEventListener("click", () => {
+        // 获取当前选中的文本
+        const selectedText = this.app.workspace.activeLeaf?.view?.editor?.getSelection();
+        if (selectedText) {
+          this.onSelect({ fullStyle: borderStyle.style });
+          this.close();
+        }
+      });
+      
+      // 右键直接应用到所有匹配
+      btn.addEventListener("contextmenu", async (e) => {
+        e.preventDefault();
+        try {
+          // 获取编辑器实例
+          const activeLeaf = this.app.workspace.activeLeaf;
+          const editor = activeLeaf && activeLeaf.view && activeLeaf.view.editor;
+          
+          if (editor) {
+            const content = editor.getValue();
+            let hasChanges = false;
+            let highlightedCount = 0;
+            
+            // 获取当前选中的文本，如果没有则从按钮的HTML内容中提取显示文本
+            let searchText = editor.getSelection();
+            if (!searchText) {
+              // 从按钮的HTML中提取span标签的文本内容
+              const spanElement = btn.querySelector('span');
+              searchText = spanElement ? spanElement.textContent : '示例';
+            }
+            const escapedSearchText = window.colorizeTextPluginInstance.constructor.staticEscapeRegExp(searchText);
+            
+            let processedContent = content.replace(
+              new RegExp(`(?<!<span[^>]*>)(${escapedSearchText})(?!</span>)`, "g"),
+              (match, p1, offset) => {
+                // 检查当前匹配是否在已有的span标签内
+                const beforeMatch = content.slice(0, offset);
+                const lastSpanStart = beforeMatch.lastIndexOf('<span');
+                const lastSpanEnd = beforeMatch.lastIndexOf('</span>');
+                
+                // 如果上一个span开始标签在span结束标签之后，说明当前在span内部
+                if (lastSpanStart > lastSpanEnd) {
+                  return match;
+                }
+                
+                highlightedCount++;
+                hasChanges = true;
+                return `<span style="${borderStyle.style}">${p1}</span>`;
+              }
+            );
+            
+            if (hasChanges) {
+              const oldCursor = editor.getCursor();
+              const oldScroll = editor.getScrollInfo ? editor.getScrollInfo() : null;
+              
+              editor.setValue(processedContent);
+              
+              // 恢复光标位置和滚动位置
+              if (oldCursor) {
+                editor.setCursor(oldCursor);
+              }
+              if (oldScroll && editor.scrollTo) {
+                editor.scrollTo(oldScroll.left, oldScroll.top);
+              }
+              
+              // 保存高亮历史
+              const filePath = this.app.workspace.getActiveFile()?.path || "__unknown__";
+              if (window.colorizeTextPluginInstance) {
+                const plugin = window.colorizeTextPluginInstance;
+                const history = await plugin.loadFileHighlightHistory(filePath);
+                const newRecord = {
+                  text: searchText,
+                  fullStyle: borderStyle.style,
+                  time: Date.now()
+                };
+                const newHistory = [newRecord, ...history].slice(0, 100);
+                await plugin.saveFileHighlightHistory(filePath, newHistory);
+              }
+              
+              new Notice(`已应用 ${highlightedCount} 处边框样式`);
+            } else {
+              new Notice("没有找到需要应用样式的文本");
+            }
+          }
+        } catch (error) {
+          console.error('ColorizeText: 应用边框样式失败:', error);
+          new Notice('应用边框样式失败: ' + error.message);
+        }
+      });
+      
+      borderStylesContainer.appendChild(btn);
+    });
+    
+    contentEl.appendChild(borderStylesContainer);
+    
     // 添加自定义配色标题
     const customPaletteTitle = document.createElement("div");
     customPaletteTitle.innerText = "自定义配色（可拖拽排序）";
@@ -2679,8 +2936,27 @@ class PaletteModal extends Modal {
         e.preventDefault();
         const menu = document.createElement("div");
         menu.style.position = "fixed";
-        menu.style.left = e.clientX + "px";
-        menu.style.top = e.clientY + "px";
+        
+        // 计算菜单位置，确保不超出屏幕
+        const menuWidth = 180; // 预估菜单宽度
+        const menuHeight = 100; // 预估菜单高度
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight;
+        
+        // 检查是否会超出右侧边界，如果会则调整位置
+        let left = e.clientX;
+        if (left + menuWidth > screenWidth) {
+          left = screenWidth - menuWidth - 10;
+        }
+        
+        // 检查是否会超出底部边界，如果会则调整位置
+        let top = e.clientY;
+        if (top + menuHeight > screenHeight) {
+          top = screenHeight - menuHeight - 10;
+        }
+        
+        menu.style.left = left + "px";
+        menu.style.top = top + "px";
         menu.style.background = "#fff";
         menu.style.border = "1px solid #ccc";
         menu.style.borderRadius = "6px";
@@ -2860,9 +3136,21 @@ class PaletteModal extends Modal {
           item.style.background = "none";
           item.style.color = "inherit";
         } else {
-          // 保持原有渲染方式
-          item.style.background = h.bgColor;
-          item.style.color = h.textColor;
+          // 优先使用fullStyle
+          if (h.fullStyle) {
+            // 解析fullStyle中的样式并应用
+            const styleParts = h.fullStyle.split(';');
+            styleParts.forEach(part => {
+              const [prop, value] = part.split(':').map(s => s.trim());
+              if (prop && value) {
+                item.style[prop.replace(/-([a-z])/g, g => g[1].toUpperCase())] = value;
+              }
+            });
+          } else {
+            // 如果没有fullStyle，回退到原有渲染方式
+            item.style.background = h.bgColor;
+            item.style.color = h.textColor;
+          }
           item.innerText = h.text.length > 16 ? h.text.slice(0, 16) + "..." : h.text;
         }
         item.title = h.text;
@@ -2891,8 +3179,27 @@ class PaletteModal extends Modal {
           // 弹出菜单
           const menu = document.createElement("div");
           menu.style.position = "fixed";
-          menu.style.left = e.clientX + "px";
-          menu.style.top = e.clientY + "px";
+          
+          // 计算菜单位置，确保不超出屏幕
+          const menuWidth = 200; // 预估菜单宽度
+          const menuHeight = 300; // 预估菜单高度（包含所有选项）
+          const screenWidth = window.innerWidth;
+          const screenHeight = window.innerHeight;
+          
+          // 检查是否会超出右侧边界，如果会则调整位置
+          let left = e.clientX;
+          if (left + menuWidth > screenWidth) {
+            left = screenWidth - menuWidth - 10;
+          }
+          
+          // 检查是否会超出底部边界，如果会则调整位置
+          let top = e.clientY;
+          if (top + menuHeight > screenHeight) {
+            top = screenHeight - menuHeight - 10;
+          }
+          
+          menu.style.left = left + "px";
+          menu.style.top = top + "px";
           menu.style.background = "#fff";
           menu.style.border = "1px solid #ccc";
           menu.style.borderRadius = "6px";
