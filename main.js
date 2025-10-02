@@ -2336,6 +2336,8 @@ class PaletteModal extends Modal {
               }
               
               new Notice(`已应用 ${highlightedCount} 处边框样式`);
+              // 应用后关闭窗口
+              this.close();
             } else {
               new Notice("没有找到需要应用样式的文本");
             }
@@ -2353,7 +2355,7 @@ class PaletteModal extends Modal {
     
     // 添加自定义配色标题
     const customPaletteTitle = document.createElement("div");
-    customPaletteTitle.innerText = "自定义配色（可拖拽排序）";
+    customPaletteTitle.innerText = "自定义配色（单击应用到当前 右击应用到所有匹配 中键删除）";
     customPaletteTitle.style.fontSize = "14px";
     customPaletteTitle.style.fontWeight = "bold";
     customPaletteTitle.style.marginTop = "12px";
@@ -2985,7 +2987,7 @@ class PaletteModal extends Modal {
       
       // 标题文本
       const titleText = document.createElement("span");
-      titleText.innerText = "高亮历史";
+      titleText.innerText = "高亮历史(单击定位 中键删除所有匹配)";
       historyTitle.appendChild(titleText);
       
       // 打开文件夹按钮
