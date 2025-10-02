@@ -245,36 +245,61 @@ module.exports = class ColorizeTextPlugin extends Plugin {
     
     for (const item of sortedHistory) {
       const searchText = item.text;
-      const style = item.fullStyle || `color: ${item.textColor}; background-color: ${item.bgColor}`;
       
       // 转义搜索文本中的特殊字符
       const escapedSearchText = this.escapeRegExp(searchText);
       
-      // 使用正则表达式查找所有匹配项，但排除已经在span标签内的文本
-      // 注意：这里我们使用新的方法来处理替换，不再基于固定位置
-      
       // 临时保存当前的处理结果，用于检测是否有变化
       const beforeProcessing = processedContent;
       
-      // 使用函数替换的方式，这样可以更好地控制替换逻辑
-      processedContent = processedContent.replace(
-        new RegExp(`(?<!<span[^>]*>)(${escapedSearchText})(?!</span>)`, "g"),
-        (match, p1, offset) => {
-          // 检查当前匹配是否在已有的span标签内（额外的安全检查）
-          const beforeMatch = processedContent.slice(0, offset);
-          const lastSpanStart = beforeMatch.lastIndexOf('<span');
-          const lastSpanEnd = beforeMatch.lastIndexOf('</span>');
-          
-          // 如果上一个span开始标签在span结束标签之后，说明当前在span内部
-          if (lastSpanStart > lastSpanEnd) {
-            return match;
+      // 根据历史记录类型选择不同的处理方式
+      if (item.markClass) {
+        // 对于带有markClass的记录，使用mark标签
+        processedContent = processedContent.replace(
+          new RegExp(`(?<!<mark[^>]*>)(${escapedSearchText})(?!</mark>)`, "g"),
+          (match, p1, offset) => {
+            // 检查当前匹配是否在已有的mark标签内
+            const beforeMatch = processedContent.slice(0, offset);
+            const lastMarkStart = beforeMatch.lastIndexOf('<mark');
+            const lastMarkEnd = beforeMatch.lastIndexOf('</mark>');
+            
+            // 如果上一个mark开始标签在mark结束标签之后，说明当前在mark内部
+            if (lastMarkStart > lastMarkEnd) {
+              return match;
+            }
+            
+            highlightedCount++;
+            hasChanges = true;
+            return `<mark class="${item.markClass}">${p1}</mark>`;
           }
-          
-          highlightedCount++;
-          hasChanges = true;
-          return `<span style="${style}">${p1}</span>`;
-        }
-      );
+        );
+      } else {
+        // 对于带有颜色的记录，使用span标签
+        // 检查textColor和bgColor是否存在，避免undefined
+        const textColor = item.textColor || '';
+        const bgColor = item.bgColor || '';
+        const style = item.fullStyle || (textColor || bgColor ? 
+          `color: ${textColor}; background-color: ${bgColor}` : '');
+        
+        processedContent = processedContent.replace(
+          new RegExp(`(?<!<span[^>]*>)(${escapedSearchText})(?!</span>)`, "g"),
+          (match, p1, offset) => {
+            // 检查当前匹配是否在已有的span标签内
+            const beforeMatch = processedContent.slice(0, offset);
+            const lastSpanStart = beforeMatch.lastIndexOf('<span');
+            const lastSpanEnd = beforeMatch.lastIndexOf('</span>');
+            
+            // 如果上一个span开始标签在span结束标签之后，说明当前在span内部
+            if (lastSpanStart > lastSpanEnd) {
+              return match;
+            }
+            
+            highlightedCount++;
+            hasChanges = true;
+            return style ? `<span style="${style}">${p1}</span>` : p1;
+          }
+        );
+      }
       
       // 如果这次替换没有任何变化，继续处理下一个历史项
       if (processedContent === beforeProcessing) {
@@ -1745,7 +1770,8 @@ class PaletteModal extends Modal {
         defaultBtn.addEventListener("click", () => {
           if (selectedText) {
             this.onSelect({ textColor: "#f72235", bgColor: "#fff4c2", useMarkTag: true, markClass: "more-highlight-half yellow-highlighter" });
-            this.close();
+            // 刷新弹窗内容
+            this.onOpen();
           }
         });
           
@@ -1789,7 +1815,8 @@ class PaletteModal extends Modal {
         styleBtn.addEventListener("click", () => {
           if (selectedText) {
             this.onSelect({ useMarkTag: true, markClass: style.class });
-            this.close();
+            // 刷新弹窗内容
+            this.onOpen();
           }
         });
         
@@ -1998,28 +2025,8 @@ class PaletteModal extends Modal {
       const allButtons = selectedRow.querySelectorAll("button");
       allButtons.forEach(btn => {
         if (selectedText) {
-          btn.addEventListener("contextmenu", (e) => {
-          e.preventDefault();
-          // 弹出菜单
-          const menu = document.createElement("div");
-          menu.style.position = "fixed";
-          menu.style.left = e.clientX + "px";
-          menu.style.top = e.clientY + "px";
-          menu.style.background = "#fff";
-          menu.style.border = "1px solid #ccc";
-          menu.style.borderRadius = "6px";
-          menu.style.boxShadow = "0 2px 8px rgba(0,0,0,0.12)";
-          menu.style.zIndex = "99999";
-          menu.style.padding = "4px 0";
-          menu.style.minWidth = "120px";
-          const item = document.createElement("div");
-          item.innerText = "应用到所有匹配";
-          item.style.padding = "8px 16px";
-          item.style.cursor = "pointer";
-          item.addEventListener("mouseenter", () => { item.style.background = "#f0f0f0" });
-          item.addEventListener("mouseleave", () => { item.style.background = "#fff" });
-          item.addEventListener("click", async () => {
-            menu.remove();
+          btn.addEventListener("contextmenu", async (e) => {
+            e.preventDefault();
             // 获取当前选中的文本
             const activeLeaf = this.app.workspace.activeLeaf;
             if (!activeLeaf) return;
@@ -2031,24 +2038,24 @@ class PaletteModal extends Modal {
             const content = editor.getValue();
             if (!text) return;
             // 获取当前按钮对应的样式信息
-              const markTag = btn.querySelector('mark');
-              let markClass = "more-highlight-half yellow-highlighter";
-              if (markTag) {
-                markClass = markTag.className;
-              }
-              
-              // 匹配所有未被包裹的完整选中文本
-              const markReg = new RegExp(`<mark[^>]*>\s*${text}\s*</mark>`, "g");
-              let replaced = false;
-              
-              // 只替换未包裹的完整文本
-              let newContent = content.replace(new RegExp(`(?<!<mark[^>]*>)${text}(?!</mark>)`, "g"), (match, offset, str) => {
-                // 跳过已包裹的
-                if (markReg.test(str.slice(Math.max(0, offset - 30), offset + match.length + 30))) return match;
-                replaced = true;
-                return `<mark class="${markClass}">${match}</mark>`;
-              });
+            const markTag = btn.querySelector('mark');
+            let markClass = "more-highlight-half yellow-highlighter";
+            if (markTag) {
+              markClass = markTag.className;
+            }
             
+            // 匹配所有未被包裹的完整选中文本
+            const markReg = new RegExp(`<mark[^>]*>\s*${text}\s*</mark>`, "g");
+            let replaced = false;
+            
+            // 只替换未包裹的完整文本
+            let newContent = content.replace(new RegExp(`(?<!<mark[^>]*>)${text}(?!</mark>)`, "g"), (match, offset, str) => {
+              // 跳过已包裹的
+              if (markReg.test(str.slice(Math.max(0, offset - 30), offset + match.length + 30))) return match;
+              replaced = true;
+              return `<mark class="${markClass}">${match}</mark>`;
+            });
+          
             // 确保编辑器存在且内容已修改
             if (replaced) {
               // 记录原光标和滚动条位置
@@ -2066,18 +2073,18 @@ class PaletteModal extends Modal {
                 // 使用新方法加载历史
                 const history = await plugin.loadFileHighlightHistory(filePath);
                 // 使用当前按钮的样式信息
-              const styleInfo = markStyles.find(s => s.class === markClass) || {
-                textColor: "#f72235",
-                bgColor: "#fff4c2"
-              };
-              
-              const newRecord = {
-                text: text,
-                textColor: styleInfo.textColor,
-                bgColor: styleInfo.bgColor,
-                fullStyle: markClass,
-                time: Date.now()
-              };
+                const styleInfo = markStyles.find(s => s.class === markClass) || {
+                  textColor: "#f72235",
+                  bgColor: "#fff4c2"
+                };
+                
+                const newRecord = {
+                  text: text,
+                  textColor: styleInfo.textColor,
+                  bgColor: styleInfo.bgColor,
+                  fullStyle: markClass,
+                  time: Date.now()
+                };
                 // 使用新方法保存历史
                 const newHistory = [newRecord, ...history].slice(0, 100);
                 await plugin.saveFileHighlightHistory(filePath, newHistory);
@@ -2086,16 +2093,6 @@ class PaletteModal extends Modal {
             // 应用后关闭弹窗
             this.close();
           });
-          menu.appendChild(item);
-          document.body.appendChild(menu);
-          // 点击其他区域关闭菜单
-          const closeMenu = (ev) => {
-            if (!menu.contains(ev.target)) menu.remove();
-          };
-          setTimeout(() => {
-            document.addEventListener("mousedown", closeMenu, { once: true });
-          }, 0);
-        });
       }
       });
       
@@ -2444,62 +2441,7 @@ class PaletteModal extends Modal {
         this.close();
       });
       
-      // 添加右键菜单移除功能
-      btn.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        const menu = document.createElement("div");
-        menu.style.position = "fixed";
-        menu.style.left = e.clientX + "px";
-        menu.style.top = e.clientY + "px";
-        menu.style.background = "#fff";
-        menu.style.border = "1px solid #ccc";
-        menu.style.borderRadius = "6px";
-        menu.style.boxShadow = "0 2px 8px rgba(0,0,0,0.12)";
-        menu.style.zIndex = "99999";
-        menu.style.padding = "4px 0";
-        menu.style.minWidth = "120px";
-        const item = document.createElement("div");
-        item.innerText = "移除配色";
-        item.style.padding = "8px 16px";
-        item.style.cursor = "pointer";
-        item.addEventListener("mouseenter", () => { item.style.background = "#f0f0f0" });
-        item.addEventListener("mouseleave", () => { item.style.background = "#fff" });
-        item.addEventListener("click", async () => {
-          menu.remove();
-          // 从palette中移除当前配色
-          const newPalette = [...this.palette].filter((_, index) => index !== idx);
-          this.palette = newPalette;
-          
-          // 保存更新后的palette
-            try {
-              if (window.colorizeTextPluginInstance) {
-                await window.colorizeTextPluginInstance.savePalette();
-              } else {
-                console.error('ColorizeText: 主插件实例不存在，无法保存palette');
-              }
-            // 重新打开弹窗以刷新视图
-            this.close();
-            if (window.colorizeTextPluginInstance) {
-              const activeLeaf = this.app.workspace.activeLeaf;
-              if (activeLeaf && activeLeaf.view && activeLeaf.view.editor) {
-                window.colorizeTextPluginInstance.openColorModal(activeLeaf.view.editor);
-              }
-            }
-          } catch (error) {
-            console.error('ColorizeText: 移除配色时保存失败:', error);
-          }
-        });
-        menu.appendChild(item);
-        document.body.appendChild(menu);
-        
-        // 点击其他区域关闭菜单
-        const closeMenu = (ev) => {
-          if (!menu.contains(ev.target)) menu.remove();
-        };
-        setTimeout(() => {
-          document.addEventListener("mousedown", closeMenu, { once: true });
-        }, 0);
-      });
+
       
       // 添加拖拽功能
       btn.draggable = true;
@@ -2694,107 +2636,83 @@ class PaletteModal extends Modal {
           }
       });
       
-      // 右键菜单：应用到所有匹配 + 移除配色方案
-      btn.addEventListener("contextmenu", (e) => {
+      // 右键直接应用到所有匹配项
+      btn.addEventListener("contextmenu", async (e) => {
         e.preventDefault();
-        // 弹出菜单
-        const menu = document.createElement("div");
-        menu.style.position = "fixed";
-        menu.style.left = e.clientX + "px";
-        menu.style.top = e.clientY + "px";
-        menu.style.background = "#fff";
-        menu.style.border = "1px solid #ccc";
-        menu.style.borderRadius = "6px";
-        menu.style.boxShadow = "0 2px 8px rgba(0,0,0,0.12)";
-        menu.style.zIndex = "99999";
-        menu.style.padding = "4px 0";
-        menu.style.minWidth = "120px";
-        const item = document.createElement("div");
-        item.innerText = "应用到所有匹配";
-        item.style.padding = "8px 16px";
-        item.style.cursor = "pointer";
-        item.addEventListener("mouseenter", () => { item.style.background = "#f0f0f0"; });
-        item.addEventListener("mouseleave", () => { item.style.background = "#fff"; });
-        item.addEventListener("click", async () => {
-          menu.remove();
-          // 获取当前选中的文本（应为原始选区，而不是预览文本）
-          const activeLeaf = this.app.workspace.activeLeaf;
-          if (!activeLeaf) return;
-          const view = activeLeaf.view;
-          if (!view || !view.editor) return;
-          const editor = view.editor;
-          let selectedText = editor.getSelection();
-          if (!selectedText) selectedText = this.previewText.replace(/\.\.\.$/, "");
-          const content = editor.getValue();
-          if (!selectedText) return;
-          // 匹配所有未被包裹的完整选中文本
-          const spanReg = new RegExp(`<span[^>]*>\s*${selectedText}\s*<\/span>`, "g");
-          let replaced = false;
-          // 只替换未包裹的完整文本（不拆分重复子串）
-          let newContent = content.replace(new RegExp(`(?<!<span[^>]*>)${selectedText}(?!<\/span>)`, "g"), (match, offset, str) => {
-            // 跳过已包裹的
-            if (spanReg.test(str.slice(Math.max(0, offset - 30), offset + match.length + 30))) return match;
-            replaced = true;
-            return `<span style="color: ${pair.textColor}; background-color: ${pair.bgColor};">${match}</span>`;
-          });
-          
-          // 确保编辑器存在且内容已修改
-          if (replaced) {
-            // 记录原光标和滚动条位置
-            const oldCursor = editor.getCursor();
-            const oldScroll = editor.getScrollInfo ? editor.getScrollInfo() : null;
-            editor.setValue(newContent);
-            // 恢复光标
-            if (oldCursor) editor.setCursor(oldCursor);
-            // 恢复滚动条
-            if (oldScroll && editor.scrollTo) editor.scrollTo(oldScroll.left, oldScroll.top);
-            // 保存高亮历史
-            const filePath = this.app.workspace.getActiveFile()?.path || "__unknown__";
-            if (window.colorizeTextPluginInstance) {
-              const plugin = window.colorizeTextPluginInstance;
-              // 使用新方法加载历史
-              const history = await plugin.loadFileHighlightHistory(filePath);
-              // 直接使用pair中的颜色值，而不是尝试从resultText.value中匹配
-              const newRecord = {
-                text: selectedText,
-                textColor: pair.textColor,
-                bgColor: pair.bgColor,
-                fullStyle: `color: ${pair.textColor}; background-color: ${pair.bgColor}`,
-                time: Date.now()
-              };
-              // 使用新方法保存历史
-              const newHistory = [newRecord, ...history].slice(0, 100);
-              await plugin.saveFileHighlightHistory(filePath, newHistory);
-            }
-          }
-          // 应用后关闭弹窗
-          this.close();
+        // 获取当前选中的文本（应为原始选区，而不是预览文本）
+        const activeLeaf = this.app.workspace.activeLeaf;
+        if (!activeLeaf) return;
+        const view = activeLeaf.view;
+        if (!view || !view.editor) return;
+        const editor = view.editor;
+        let selectedText = editor.getSelection();
+        if (!selectedText) selectedText = this.previewText.replace(/\.\.\.$/, "");
+        const content = editor.getValue();
+        if (!selectedText) return;
+        // 匹配所有未被包裹的完整选中文本
+        const spanReg = new RegExp(`<span[^>]*>\s*${selectedText}\s*<\/span>`, "g");
+        let replaced = false;
+        // 只替换未包裹的完整文本（不拆分重复子串）
+        let newContent = content.replace(new RegExp(`(?<!<span[^>]*>)${selectedText}(?!<\/span>)`, "g"), (match, offset, str) => {
+          // 跳过已包裹的
+          if (spanReg.test(str.slice(Math.max(0, offset - 30), offset + match.length + 30))) return match;
+          replaced = true;
+          return `<span style="color: ${pair.textColor}; background-color: ${pair.bgColor};">${match}</span>`;
         });
-        menu.appendChild(item);
-        // 新增移除配色方案菜单项
-        const removeScheme = document.createElement("div");
-        removeScheme.innerText = "移除";
-        removeScheme.style.padding = "8px 16px";
-        removeScheme.style.cursor = "pointer";
-        removeScheme.addEventListener("mouseenter", () => { removeScheme.style.background = "#f0f0f0"; });
-        removeScheme.addEventListener("mouseleave", () => { removeScheme.style.background = "#fff"; });
-        removeScheme.addEventListener("click", async () => {
-          menu.remove();
+        
+        // 确保编辑器存在且内容已修改
+        if (replaced) {
+          // 记录原光标和滚动条位置
+          const oldCursor = editor.getCursor();
+          const oldScroll = editor.getScrollInfo ? editor.getScrollInfo() : null;
+          editor.setValue(newContent);
+          // 恢复光标
+          if (oldCursor) editor.setCursor(oldCursor);
+          // 恢复滚动条
+          if (oldScroll && editor.scrollTo) editor.scrollTo(oldScroll.left, oldScroll.top);
+          // 保存高亮历史
+          const filePath = this.app.workspace.getActiveFile()?.path || "__unknown__";
+          if (window.colorizeTextPluginInstance) {
+            const plugin = window.colorizeTextPluginInstance;
+            // 使用新方法加载历史
+            const history = await plugin.loadFileHighlightHistory(filePath);
+            // 直接使用pair中的颜色值
+            const newRecord = {
+              text: selectedText,
+              textColor: pair.textColor,
+              bgColor: pair.bgColor,
+              fullStyle: `color: ${pair.textColor}; background-color: ${pair.bgColor}`,
+              time: Date.now()
+            };
+            // 使用新方法保存历史
+            const newHistory = [newRecord, ...history].slice(0, 100);
+            await plugin.saveFileHighlightHistory(filePath, newHistory);
+          }
+        }
+        // 应用后关闭弹窗
+        this.close();
+      });
+      
+      // 中键点击移除配色方案
+      btn.addEventListener("mousedown", async (e) => {
+        // button=1 表示中键
+        if (e.button === 1) {
+          e.preventDefault();
           // 从palette中移除当前配色
           const newPalette = [...this.palette].filter((_, index) => index !== idx);
           this.palette = newPalette;
           
           // 保存更新后的palette
-            try {
-              if (window.colorizeTextPluginInstance) {
-                // 先更新主插件实例的palette，确保保存的是最新数据
-                window.colorizeTextPluginInstance.palette = newPalette;
-                // 然后调用保存方法
-                await window.colorizeTextPluginInstance.savePalette();
-                console.log('ColorizeText: 成功移除配色并保存，当前配色数量:', newPalette.length);
-              } else {
-                console.error('ColorizeText: 主插件实例不存在，无法保存palette');
-              }
+          try {
+            if (window.colorizeTextPluginInstance) {
+              // 先更新主插件实例的palette，确保保存的是最新数据
+              window.colorizeTextPluginInstance.palette = newPalette;
+              // 然后调用保存方法
+              await window.colorizeTextPluginInstance.savePalette();
+              console.log('ColorizeText: 成功移除配色并保存，当前配色数量:', newPalette.length);
+            } else {
+              console.error('ColorizeText: 主插件实例不存在，无法保存palette');
+            }
             // 重新打开弹窗以刷新视图
             this.close();
             if (window.colorizeTextPluginInstance) {
@@ -2806,19 +2724,7 @@ class PaletteModal extends Modal {
           } catch (error) {
             console.error('ColorizeText: 移除配色时保存失败:', error);
           }
-        });
-        menu.appendChild(removeScheme);
-        document.body.appendChild(menu);
-        
-        // 点击其他地方关闭菜单
-        const closeMenu = () => {
-          // 先检查menu是否仍然是document.body的子节点
-          if (menu && menu.parentNode === document.body) {
-            document.body.removeChild(menu);
-          }
-          document.removeEventListener("click", closeMenu);
-        };
-        document.addEventListener("click", closeMenu);
+        }
       });
       
       // 添加按钮到容器
@@ -3172,6 +3078,44 @@ class PaletteModal extends Modal {
             editor.scrollIntoView({ from: { line: startLine, ch: startCh }, to: { line: endLine, ch: endCh } });
           }
           this.close();
+        });
+        // 添加中键点击事件 - 直接移除所有匹配高亮
+        item.addEventListener("mousedown", async (e) => {
+          if (e.button === 1) { // 中键点击
+            e.preventDefault();
+            // 移除所有匹配文本的高亮
+            const activeLeaf = this.app.workspace.activeLeaf;
+            if (!activeLeaf) return;
+            const view = activeLeaf.view;
+            if (!view || !view.editor) return;
+            const editor = view.editor;
+            const content = editor.getValue();
+            const escText = h.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            // 同时匹配span和mark标签
+            const tagReg = new RegExp(`<(span|mark)[^>]*>\\s*${escText}\\s*</\\1>`, "gi");
+            let newContent = content.replace(tagReg, h.text);
+            const oldCursor = editor.getCursor();
+            const oldScroll = editor.getScrollInfo ? editor.getScrollInfo() : null;
+            editor.setValue(newContent);
+            if (oldCursor) editor.setCursor(oldCursor);
+            if (oldScroll && editor.scrollTo) editor.scrollTo(oldScroll.left, oldScroll.top);
+            // 从高亮历史中删除该项
+            const filePath = this.app.workspace.getActiveFile()?.path || "__unknown__";
+            if (window.colorizeTextPluginInstance) {
+              const plugin = window.colorizeTextPluginInstance;
+              // 使用新方法加载历史
+              const history = await plugin.loadFileHighlightHistory(filePath);
+              // 过滤掉匹配的历史记录
+              const newHistory = history.filter(item => item.text !== h.text || item.bgColor !== h.bgColor || item.textColor !== h.textColor);
+              // 使用正确的方法名保存历史
+              await plugin.saveFileHighlightHistory(filePath, newHistory);
+              // 重新打开弹窗以刷新视图
+              this.close();
+              if (activeLeaf && activeLeaf.view && activeLeaf.view.editor) {
+                plugin.openColorModal(activeLeaf.view.editor);
+              }
+            }
+          }
         });
         // 右键菜单：添加应用和移除选项
         item.addEventListener("contextmenu", (e) => {
