@@ -255,16 +255,19 @@ module.exports = class ColorizeTextPlugin extends Plugin {
       // 根据历史记录类型选择不同的处理方式
       if (item.markClass) {
         // 对于带有markClass的记录，使用mark标签
+        // 检查文本是否已经被任何标签包裹（包括span和mark）
         processedContent = processedContent.replace(
-          new RegExp(`(?<!<mark[^>]*>)(${escapedSearchText})(?!</mark>)`, "g"),
+          new RegExp(`(?<!<(mark|span)[^>]*>)(${escapedSearchText})(?!</(mark|span)>)`, "g"),
           (match, p1, offset) => {
-            // 检查当前匹配是否在已有的mark标签内
+            // 检查当前匹配是否在已有的任何标签内（包括span和mark）
             const beforeMatch = processedContent.slice(0, offset);
             const lastMarkStart = beforeMatch.lastIndexOf('<mark');
             const lastMarkEnd = beforeMatch.lastIndexOf('</mark>');
+            const lastSpanStart = beforeMatch.lastIndexOf('<span');
+            const lastSpanEnd = beforeMatch.lastIndexOf('</span>');
             
-            // 如果上一个mark开始标签在mark结束标签之后，说明当前在mark内部
-            if (lastMarkStart > lastMarkEnd) {
+            // 如果任何一个开始标签在对应的结束标签之后，说明当前在标签内部
+            if ((lastMarkStart > lastMarkEnd) || (lastSpanStart > lastSpanEnd)) {
               return match;
             }
             
@@ -281,16 +284,19 @@ module.exports = class ColorizeTextPlugin extends Plugin {
         const style = item.fullStyle || (textColor || bgColor ? 
           `color: ${textColor}; background-color: ${bgColor}` : '');
         
+        // 检查文本是否已经被任何标签包裹（包括span和mark）
         processedContent = processedContent.replace(
-          new RegExp(`(?<!<span[^>]*>)(${escapedSearchText})(?!</span>)`, "g"),
+          new RegExp(`(?<!<(mark|span)[^>]*>)(${escapedSearchText})(?!</(mark|span)>)`, "g"),
           (match, p1, offset) => {
-            // 检查当前匹配是否在已有的span标签内
+            // 检查当前匹配是否在已有的任何标签内（包括span和mark）
             const beforeMatch = processedContent.slice(0, offset);
+            const lastMarkStart = beforeMatch.lastIndexOf('<mark');
+            const lastMarkEnd = beforeMatch.lastIndexOf('</mark>');
             const lastSpanStart = beforeMatch.lastIndexOf('<span');
             const lastSpanEnd = beforeMatch.lastIndexOf('</span>');
             
-            // 如果上一个span开始标签在span结束标签之后，说明当前在span内部
-            if (lastSpanStart > lastSpanEnd) {
+            // 如果任何一个开始标签在对应的结束标签之后，说明当前在标签内部
+            if ((lastMarkStart > lastMarkEnd) || (lastSpanStart > lastSpanEnd)) {
               return match;
             }
             
@@ -2082,7 +2088,7 @@ class PaletteModal extends Modal {
                   text: text,
                   textColor: styleInfo.textColor,
                   bgColor: styleInfo.bgColor,
-                  fullStyle: markClass,
+                  markClass: markClass,
                   time: Date.now()
                 };
                 // 使用新方法保存历史
@@ -2129,16 +2135,16 @@ class PaletteModal extends Modal {
     
     // 定义边框样式数据
     const borderStyles = [
-      { style: "border:1px solid #B22222;", name: "火砖红" },
-      { style: "border:1px solid #FF6347;", name: "番茄红" },
-      { style: "border:1px solid #FF4500;", name: "橙红色" },
-      { style: "border:1px solid #32CD32;", name: "酸橙绿" },
-      { style: "border:1px solid #008080;", name: "青色" },
-      { style: "border:1px solid #4169E1;", name: "皇家蓝" },
-      { style: "border:1px solid #8A2BE2;", name: "紫罗兰" },
-      { style: "border:1px solid #FF1493;", name: "深粉红" },
-      { style: "border:1px solid #FFD700;", name: "金色" },
-      { style: "border:1px solid #808080;", name: "灰色" },
+      { style: "border:2px solid #B22222;", name: "火砖红" },
+      { style: "border:2px solid #FF6347;", name: "番茄红" },
+      { style: "border:2px solid #FF4500;", name: "橙红色" },
+      { style: "border:2px solid #32CD32;", name: "酸橙绿" },
+      { style: "border:2px solid #008080;", name: "青色" },
+      { style: "border:2px solid #4169E1;", name: "皇家蓝" },
+      { style: "border:2px solid #8A2BE2;", name: "紫罗兰" },
+      { style: "border:2px solid #FF1493;", name: "深粉红" },
+      { style: "border:2px solid #FFD700;", name: "金色" },
+      { style: "border:2px solid #808080;", name: "灰色" },
       { style: "border:3px double purple;", name: "紫色" },
       { style: "border:3px double #FF6347;", name: "番茄红" },
       { style: "border:3px double #20B2AA;", name: "浅海绿" },
@@ -2353,6 +2359,275 @@ class PaletteModal extends Modal {
     
     contentEl.appendChild(borderStylesContainer);
     
+    // 添加格式标题
+    const formatTitle = document.createElement("div");
+    formatTitle.innerText = "格式(单击应用, 右击应用到所有)";
+    formatTitle.style.fontSize = "14px";
+    formatTitle.style.fontWeight = "bold";
+    formatTitle.style.marginTop = "12px";
+    formatTitle.style.marginBottom = "6px";
+    formatTitle.style.color = "#666";
+    contentEl.appendChild(formatTitle);
+
+    // 格式按钮容器
+    const formatButtonsContainer = document.createElement("div");
+    formatButtonsContainer.style.display = "flex";
+    formatButtonsContainer.style.flexWrap = "wrap";
+    formatButtonsContainer.style.gap = "4px";
+    formatButtonsContainer.style.marginBottom = "8px";
+
+    // 加粗按钮
+    const boldBtn = document.createElement("button");
+    boldBtn.style.display = "inline-flex";
+    boldBtn.style.alignItems = "center";
+    boldBtn.style.justifyContent = "center";
+    boldBtn.style.background = "transparent";
+    boldBtn.style.border = "none";
+    boldBtn.style.borderRadius = "4px";
+    boldBtn.style.cursor = "pointer";
+    boldBtn.style.padding = "0 8px";
+    boldBtn.style.margin = "0";
+    boldBtn.style.fontSize = "14px";
+    boldBtn.style.fontWeight = "bold";
+    boldBtn.title = "加粗 (点击应用)";
+    boldBtn.innerText = "加粗";
+    boldBtn.style.height = "auto";
+    boldBtn.style.minHeight = "22px";
+    boldBtn.style.minWidth = "32px";
+    
+    // 加粗按钮点击事件
+    boldBtn.addEventListener("click", () => {
+      const selectedText = this.app.workspace.activeLeaf?.view?.editor?.getSelection();
+      const activeLeaf = this.app.workspace.activeLeaf;
+      const editor = activeLeaf && activeLeaf.view && activeLeaf.view.editor;
+      if (selectedText && editor) {
+        editor.replaceSelection(`**${selectedText}**`);
+        // 保存高亮历史
+        const filePath = this.app.workspace.getActiveFile()?.path || "__unknown__";
+        if (window.colorizeTextPluginInstance) {
+          const plugin = window.colorizeTextPluginInstance;
+          plugin.loadFileHighlightHistory(filePath).then(history => {
+            const newRecord = {
+              text: selectedText,
+              fullStyle: "bold",
+              time: Date.now()
+            };
+            const newHistory = [newRecord, ...history].slice(0, 100);
+            plugin.saveFileHighlightHistory(filePath, newHistory);
+          });
+        }
+        this.close();
+      }
+    });
+    
+    // 加粗按钮右键事件
+    boldBtn.addEventListener("contextmenu", async (e) => {
+      e.preventDefault();
+      try {
+        const activeLeaf = this.app.workspace.activeLeaf;
+        const editor = activeLeaf && activeLeaf.view && activeLeaf.view.editor;
+        
+        if (editor) {
+          const content = editor.getValue();
+          let hasChanges = false;
+          let highlightedCount = 0;
+          
+          let searchText = editor.getSelection();
+          if (!searchText) {
+            searchText = "示例";
+          }
+          const escapedSearchText = window.colorizeTextPluginInstance.constructor.staticEscapeRegExp(searchText);
+          
+          // 避免重复加粗
+          // 使用简单的字符串包含检查来避免正则表达式转义问题
+          let processedContent = content;
+          const boldPattern = `**${searchText}**`;
+          
+          if (!content.includes(boldPattern)) {
+            processedContent = content.replace(
+              new RegExp(`(${escapedSearchText})`, "g"),
+              (match) => {
+                highlightedCount++;
+                hasChanges = true;
+                return `**${match}**`;
+              }
+            );
+          }
+          
+          if (hasChanges) {
+            const oldCursor = editor.getCursor();
+            const oldScroll = editor.getScrollInfo ? editor.getScrollInfo() : null;
+            
+            editor.setValue(processedContent);
+            
+            if (oldCursor) {
+              editor.setCursor(oldCursor);
+            }
+            if (oldScroll && editor.scrollTo) {
+              editor.scrollTo(oldScroll.left, oldScroll.top);
+            }
+            
+            const filePath = this.app.workspace.getActiveFile()?.path || "__unknown__";
+            if (window.colorizeTextPluginInstance) {
+              const plugin = window.colorizeTextPluginInstance;
+              const history = await plugin.loadFileHighlightHistory(filePath);
+              const newRecord = {
+                text: searchText,
+                fullStyle: "bold",
+                time: Date.now()
+              };
+              const newHistory = [newRecord, ...history].slice(0, 100);
+              await plugin.saveFileHighlightHistory(filePath, newHistory);
+            }
+            
+            new Notice(`已应用 ${highlightedCount} 处加粗样式`);
+            this.close();
+          } else {
+            new Notice("没有找到需要应用样式的文本或文本已加粗");
+          }
+        }
+      } catch (error) {
+        console.error('ColorizeText: 应用加粗样式失败:', error);
+        new Notice('应用加粗样式失败: ' + error.message);
+      }
+    });
+
+    // [[选中文本]]按钮
+    const linkBtn = document.createElement("button");
+    linkBtn.style.display = "inline-flex";
+    linkBtn.style.alignItems = "center";
+    linkBtn.style.justifyContent = "center";
+    linkBtn.style.background = "transparent";
+    linkBtn.style.border = "none";
+    linkBtn.style.borderRadius = "4px";
+    linkBtn.style.cursor = "pointer";
+    linkBtn.style.padding = "0 8px";
+    linkBtn.style.margin = "0";
+    linkBtn.style.fontSize = "14px";
+    linkBtn.title = "链接 (点击应用)";
+    linkBtn.style.height = "auto";
+    linkBtn.style.minHeight = "22px";
+    linkBtn.style.minWidth = "80px";
+    
+    // 更新链接按钮文本以显示实际选中的文本
+    function updateLinkButtonText() {
+      const selectedText = this.app.workspace.activeLeaf?.view?.editor?.getSelection() || '';
+      if (selectedText) {
+        linkBtn.innerText = `[[${selectedText}]]`;
+      } else {
+        linkBtn.innerText = '[[选中文本]]';
+      }
+    }
+    
+    // 初始化按钮文本
+    updateLinkButtonText.call(this);
+    
+    // 在编辑器选择变化时更新按钮文本
+    this.app.workspace.on('editor-paste', updateLinkButtonText.bind(this));
+    this.app.workspace.on('editor-cursor-change', updateLinkButtonText.bind(this));
+    
+    // [[选中文本]]按钮点击事件
+    linkBtn.addEventListener("click", () => {
+      const selectedText = this.app.workspace.activeLeaf?.view?.editor?.getSelection();
+      if (selectedText) {
+        const activeLeaf = this.app.workspace.activeLeaf;
+        const editor = activeLeaf && activeLeaf.view && activeLeaf.view.editor;
+        if (editor) {
+          editor.replaceSelection(`[[${selectedText}]]`);
+          // 保存高亮历史
+          const filePath = this.app.workspace.getActiveFile()?.path || "__unknown__";
+          if (window.colorizeTextPluginInstance) {
+            const plugin = window.colorizeTextPluginInstance;
+            plugin.loadFileHighlightHistory(filePath).then(history => {
+              const newRecord = {
+                text: selectedText,
+                fullStyle: "link",
+                time: Date.now()
+              };
+              const newHistory = [newRecord, ...history].slice(0, 100);
+              plugin.saveFileHighlightHistory(filePath, newHistory);
+            });
+          }
+          this.close();
+        }
+      }
+    });
+    
+    // [[选中文本]]按钮右键事件
+    linkBtn.addEventListener("contextmenu", async (e) => {
+      e.preventDefault();
+      try {
+        const activeLeaf = this.app.workspace.activeLeaf;
+        const editor = activeLeaf && activeLeaf.view && activeLeaf.view.editor;
+        
+        if (editor) {
+          const content = editor.getValue();
+          let hasChanges = false;
+          let highlightedCount = 0;
+          
+          let searchText = editor.getSelection();
+          if (!searchText) {
+            searchText = "示例";
+          }
+          const escapedSearchText = window.colorizeTextPluginInstance.constructor.staticEscapeRegExp(searchText);
+          
+          // 避免重复链接化
+          const linkReg = new RegExp(`\\[\\[${escapedSearchText}\\]\\]`, "g");
+          let processedContent = content;
+          
+          if (!linkReg.test(content)) {
+            processedContent = content.replace(
+              new RegExp(`(${escapedSearchText})`, "g"),
+              (match) => {
+                highlightedCount++;
+                hasChanges = true;
+                return `[[${match}]]`;
+              }
+            );
+          }
+          
+          if (hasChanges) {
+            const oldCursor = editor.getCursor();
+            const oldScroll = editor.getScrollInfo ? editor.getScrollInfo() : null;
+            
+            editor.setValue(processedContent);
+            
+            if (oldCursor) {
+              editor.setCursor(oldCursor);
+            }
+            if (oldScroll && editor.scrollTo) {
+              editor.scrollTo(oldScroll.left, oldScroll.top);
+            }
+            
+            const filePath = this.app.workspace.getActiveFile()?.path || "__unknown__";
+            if (window.colorizeTextPluginInstance) {
+              const plugin = window.colorizeTextPluginInstance;
+              const history = await plugin.loadFileHighlightHistory(filePath);
+              const newRecord = {
+                text: searchText,
+                fullStyle: "link",
+                time: Date.now()
+              };
+              const newHistory = [newRecord, ...history].slice(0, 100);
+              await plugin.saveFileHighlightHistory(filePath, newHistory);
+            }
+            
+            new Notice(`已应用 ${highlightedCount} 处链接样式`);
+            this.close();
+          } else {
+            new Notice("没有找到需要应用样式的文本或文本已链接化");
+          }
+        }
+      } catch (error) {
+        console.error('ColorizeText: 应用链接样式失败:', error);
+        new Notice('应用链接样式失败: ' + error.message);
+      }
+    });
+
+    formatButtonsContainer.appendChild(boldBtn);
+    formatButtonsContainer.appendChild(linkBtn);
+    contentEl.appendChild(formatButtonsContainer);
+
     // 添加自定义配色标题
     const customPaletteTitle = document.createElement("div");
     customPaletteTitle.innerText = "自定义配色（单击应用到当前 右击应用到所有匹配 中键删除）";
