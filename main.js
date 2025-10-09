@@ -3,6 +3,18 @@ const { Plugin, Modal, MarkdownView, Setting, PluginSettingTab } = require("obsi
 
 module.exports = class ColorizeTextPlugin extends Plugin {
   async onload() {
+    // 初始化日志文件
+    const fs = require('fs').promises;
+    const path = require('path');
+    this.logPath = path.join("D:\\Documents\\Obsidian Vault\\.obsidian\\plugins\\colorize-text", 'debug.log');
+    try {
+      await fs.writeFile(this.logPath, `ColorizeText 插件初始化开始 - ${new Date().toISOString()}\n`, 'utf8');
+      await fs.appendFile(this.logPath, `工作目录: ${process.cwd()}\n`, 'utf8');
+      await fs.appendFile(this.logPath, `插件路径: ${__dirname}\n`, 'utf8');
+    } catch (err) {
+      console.error('初始化日志失败:', err);
+    }
+    
     // 首先立即创建设置对象，确保它在插件启动时就存在
     this.settings = {
       apiKey: "",
@@ -10,6 +22,15 @@ module.exports = class ColorizeTextPlugin extends Plugin {
       apiUrl: "https://api.openai.com/v1/chat/completions",
       apiModel: "gpt-3.5-turbo",
       enableAIColor: true
+    };
+    
+    // 添加日志方法
+    this.log = async (message) => {
+      try {
+        await fs.appendFile(this.logPath, `[${new Date().toISOString()}] ${message}\n`, 'utf8');
+      } catch (err) {
+        console.error('写入日志失败:', err);
+      }
     };
     
     // 尝试从api_data.json加载API设置
@@ -225,99 +246,27 @@ module.exports = class ColorizeTextPlugin extends Plugin {
       return;
     }
     
+    console.log("ColorizeText: 当前文件路径:", filePath);
+    console.log("ColorizeText: 对应高亮历史文件:", this.getHighlightFileName(filePath));
+    
     // 加载当前文件的高亮历史
     const history = await this.loadFileHighlightHistory(filePath);
     
     if (!history || history.length === 0) {
+      console.log("ColorizeText: 高亮历史记录:", history);
       new Notice("当前文件没有高亮历史记录");
       return;
     }
     
-    let content = editor.getValue();
-    let hasChanges = false;
-    let highlightedCount = 0;
+    // 直接使用内嵌的应用高亮历史函数
+    const content = editor.getValue();
+    const result = this.applyHighlightHistoryToFile(content, history);
     
-    // 遍历高亮历史，从长到短处理，优先匹配较长的文本
-    const sortedHistory = [...history].sort((a, b) => b.text.length - a.text.length);
-    
-    // 创建一个新的内容字符串进行处理，避免在原始字符串上多次修改导致位置计算错误
-    let processedContent = content;
-    
-    for (const item of sortedHistory) {
-      const searchText = item.text;
-      
-      // 转义搜索文本中的特殊字符
-      const escapedSearchText = this.escapeRegExp(searchText);
-      
-      // 临时保存当前的处理结果，用于检测是否有变化
-      const beforeProcessing = processedContent;
-      
-      // 根据历史记录类型选择不同的处理方式
-      if (item.markClass) {
-        // 对于带有markClass的记录，使用mark标签
-        // 检查文本是否已经被任何标签包裹（包括span和mark）
-        processedContent = processedContent.replace(
-          new RegExp(`(?<!<(mark|span)[^>]*>)(${escapedSearchText})(?!</(mark|span)>)`, "g"),
-          (match, p1, offset) => {
-            // 检查当前匹配是否在已有的任何标签内（包括span和mark）
-            const beforeMatch = processedContent.slice(0, offset);
-            const lastMarkStart = beforeMatch.lastIndexOf('<mark');
-            const lastMarkEnd = beforeMatch.lastIndexOf('</mark>');
-            const lastSpanStart = beforeMatch.lastIndexOf('<span');
-            const lastSpanEnd = beforeMatch.lastIndexOf('</span>');
-            
-            // 如果任何一个开始标签在对应的结束标签之后，说明当前在标签内部
-            if ((lastMarkStart > lastMarkEnd) || (lastSpanStart > lastSpanEnd)) {
-              return match;
-            }
-            
-            highlightedCount++;
-            hasChanges = true;
-            return `<mark class="${item.markClass}">${p1}</mark>`;
-          }
-        );
-      } else {
-        // 对于带有颜色的记录，使用span标签
-        // 检查textColor和bgColor是否存在，避免undefined
-        const textColor = item.textColor || '';
-        const bgColor = item.bgColor || '';
-        const style = item.fullStyle || (textColor || bgColor ? 
-          `color: ${textColor}; background-color: ${bgColor}` : '');
-        
-        // 检查文本是否已经被任何标签包裹（包括span和mark）
-        processedContent = processedContent.replace(
-          new RegExp(`(?<!<(mark|span)[^>]*>)(${escapedSearchText})(?!</(mark|span)>)`, "g"),
-          (match, p1, offset) => {
-            // 检查当前匹配是否在已有的任何标签内（包括span和mark）
-            const beforeMatch = processedContent.slice(0, offset);
-            const lastMarkStart = beforeMatch.lastIndexOf('<mark');
-            const lastMarkEnd = beforeMatch.lastIndexOf('</mark>');
-            const lastSpanStart = beforeMatch.lastIndexOf('<span');
-            const lastSpanEnd = beforeMatch.lastIndexOf('</span>');
-            
-            // 如果任何一个开始标签在对应的结束标签之后，说明当前在标签内部
-            if ((lastMarkStart > lastMarkEnd) || (lastSpanStart > lastSpanEnd)) {
-              return match;
-            }
-            
-            highlightedCount++;
-            hasChanges = true;
-            return style ? `<span style="${style}">${p1}</span>` : p1;
-          }
-        );
-      }
-      
-      // 如果这次替换没有任何变化，继续处理下一个历史项
-      if (processedContent === beforeProcessing) {
-        continue;
-      }
-    }
-    
-    if (hasChanges) {
+    if (result.appliedCount > 0) {
       const oldCursor = editor.getCursor();
       const oldScroll = editor.getScrollInfo ? editor.getScrollInfo() : null;
       
-      editor.setValue(processedContent);
+      editor.setValue(result.processedContent);
       
       // 恢复光标位置和滚动位置
       if (oldCursor) {
@@ -327,10 +276,152 @@ module.exports = class ColorizeTextPlugin extends Plugin {
         editor.scrollTo(oldScroll.left, oldScroll.top);
       }
       
-      new Notice(`已应用 ${highlightedCount} 处高亮`);
+      new Notice(`已应用 ${result.appliedCount} 处高亮`);
     } else {
       new Notice("没有找到需要应用高亮的文本");
     }
+  }
+
+  // 应用高亮历史到文件内容的函数（优化版本）
+  applyHighlightHistoryToFile(fileContent, highlightHistory) {
+    // 提前检查参数有效性
+    if (!fileContent || !highlightHistory || highlightHistory.length === 0) {
+      return { processedContent: fileContent, appliedCount: 0 };
+    }
+    
+    let processedContent = fileContent;
+    let appliedCount = 0;
+    
+    // 按文本长度排序，优先匹配较长的文本
+    const sortedHistory = [...highlightHistory].sort((a, b) => b.text.length - a.text.length);
+    
+    // 创建一个通用的检查函数，避免重复代码
+    const checkIfInFormat = (beforeMatch, afterMatch) => {
+      // 检查是否在 mark 标签内
+      const lastMarkStart = beforeMatch.lastIndexOf('<mark');
+      const lastMarkEnd = beforeMatch.lastIndexOf('</mark>');
+      const isInMark = lastMarkStart > lastMarkEnd;
+      
+      if (isInMark) return true;
+      
+      // 检查是否在 span 标签内
+      const lastSpanStart = beforeMatch.lastIndexOf('<span');
+      const lastSpanEnd = beforeMatch.lastIndexOf('</span>');
+      const isInSpan = lastSpanStart > lastSpanEnd;
+      
+      if (isInSpan) return true;
+      
+      // 检查是否在bold格式内 (**text**)
+      const allBoldBefore = (beforeMatch.match(/\*\*/g) || []).length;
+      const isInBold = allBoldBefore % 2 === 1;
+      
+      if (isInBold) return true;
+      
+      // 检查是否在链接格式内 ([[text]])
+      const lastLinkStart = beforeMatch.lastIndexOf('[[');
+      const lastLinkEnd = beforeMatch.lastIndexOf(']]');
+      const isInLink = lastLinkStart > lastLinkEnd;
+      
+      if (isInLink) return true;
+      
+      // 快速检查后面是否有结束标签
+      if (afterMatch && afterMatch.length >= 10) {
+        const nextChars = afterMatch.substring(0, 10);
+        const hasClosingTag = nextChars.startsWith('</mark>') || 
+                             nextChars.startsWith('</span>') || 
+                             nextChars.startsWith('**') || 
+                             nextChars.startsWith(']]');
+        
+        if (hasClosingTag) return true;
+      }
+      
+      return false;
+    };
+    
+    // 对不同类型的高亮使用统一的处理逻辑
+    for (const item of sortedHistory) {
+      const searchText = item.text;
+      if (!searchText) continue;
+      
+      // 转义搜索文本中的特殊字符
+      const escapedSearchText = this.escapeRegExp(searchText);
+      
+      let regex, replacement;
+      
+      if (item.markClass) {
+        // 处理 markClass 类型的高亮
+        regex = new RegExp(escapedSearchText, "g");
+        replacement = (match, offset) => {
+          const beforeMatch = processedContent.slice(0, offset);
+          const afterMatch = processedContent.slice(offset + match.length);
+          
+          if (checkIfInFormat(beforeMatch, afterMatch)) {
+            return match;
+          }
+          
+          appliedCount++;
+          return `<mark class="${item.markClass}">${match}</mark>`;
+        };
+      } else if (item.fullStyle === "bold") {
+        // 处理 bold 格式
+        regex = new RegExp(escapedSearchText, "g");
+        replacement = (match, offset) => {
+          const beforeMatch = processedContent.slice(0, offset);
+          const afterMatch = processedContent.slice(offset + match.length);
+          
+          if (checkIfInFormat(beforeMatch, afterMatch)) {
+            return match;
+          }
+          
+          appliedCount++;
+          return `**${match}**`;
+        };
+      } else if (item.fullStyle === "link") {
+        // 处理 link 格式
+        regex = new RegExp(escapedSearchText, "g");
+        replacement = (match, offset) => {
+          const beforeMatch = processedContent.slice(0, offset);
+          const afterMatch = processedContent.slice(offset + match.length);
+          
+          if (checkIfInFormat(beforeMatch, afterMatch)) {
+            return match;
+          }
+          
+          appliedCount++;
+          return `[[${match}]]`;
+        };
+      } else if (item.textColor || item.bgColor || item.fullStyle) {
+        // 处理普通 span 样式
+        const textColor = item.textColor || '';
+        const bgColor = item.bgColor || '';
+        const style = item.fullStyle || (textColor || bgColor ? 
+            `color: ${textColor}; background-color: ${bgColor}` : '');
+        
+        if (style) {
+          regex = new RegExp(escapedSearchText, "g");
+          replacement = (match, offset) => {
+            const beforeMatch = processedContent.slice(0, offset);
+            const afterMatch = processedContent.slice(offset + match.length);
+            
+            if (checkIfInFormat(beforeMatch, afterMatch)) {
+              return match;
+            }
+            
+            appliedCount++;
+            return `<span style="${style}">${match}</span>`;
+          };
+        } else {
+          continue; // 没有样式需要应用，跳过
+        }
+      } else {
+        continue; // 不支持的高亮类型，跳过
+      }
+      
+      // 应用替换
+      processedContent = processedContent.replace(regex, replacement);
+    }
+    
+    return { processedContent, appliedCount };
   }
   
   // 转义正则表达式特殊字符
@@ -346,6 +437,8 @@ module.exports = class ColorizeTextPlugin extends Plugin {
   // 清理事件监听器和资源
   onunload() {
     console.log("ColorizeText 插件已卸载");
+
+
     // 所有通过registerEvent注册的事件会自动清理
   }
   
@@ -495,21 +588,27 @@ module.exports = class ColorizeTextPlugin extends Plugin {
     }
     
     if (!filePath || filePath === "__unknown__") {
+      console.log('ColorizeText: 无效的文件路径:', filePath);
       return [];
     }
     
     // 优先从内存缓存加载
     if (this.highlightHistory[filePath]) {
+      console.log('ColorizeText: 从内存缓存加载高亮历史:', filePath);
       return this.highlightHistory[filePath];
     }
     
     const fs = require('fs').promises;
     const fileName = this.getHighlightFileName(filePath);
+    console.log('ColorizeText: 尝试从文件加载高亮历史:', fileName);
     try {
       const content = await fs.readFile(fileName, 'utf8');
+      console.log('ColorizeText: 文件内容:', content.substring(0, 100) + (content.length > 100 ? '...' : ''));
       const history = JSON.parse(content);
       // 缓存到内存
       this.highlightHistory[filePath] = history;
+      await this.log(`成功加载高亮历史记录数: ${history.length}, 文件: ${fileName}`);
+      console.log('ColorizeText: 成功加载高亮历史记录数:', history.length);
       return history;
     } catch (err) {
       if (err.code !== 'ENOENT') {
@@ -581,6 +680,8 @@ module.exports = class ColorizeTextPlugin extends Plugin {
       return;
     }
     
+
+
     const fs = require('fs').promises;
     const fileName = this.getHighlightFileName(filePath);
     
@@ -2135,40 +2236,39 @@ class PaletteModal extends Modal {
     
     // 定义边框样式数据
     const borderStyles = [
-      { style: "border:2px solid #B22222;", name: "火砖红" },
+
       { style: "border:2px solid #FF6347;", name: "番茄红" },
-      { style: "border:2px solid #FF4500;", name: "橙红色" },
-      { style: "border:2px solid #32CD32;", name: "酸橙绿" },
       { style: "border:2px solid #008080;", name: "青色" },
       { style: "border:2px solid #4169E1;", name: "皇家蓝" },
       { style: "border:2px solid #8A2BE2;", name: "紫罗兰" },
       { style: "border:2px solid #FF1493;", name: "深粉红" },
       { style: "border:2px solid #FFD700;", name: "金色" },
-      { style: "border:2px solid #808080;", name: "灰色" },
-      { style: "border:3px double purple;", name: "紫色" },
+      
+      { style: "border:1px solid red; border-radius:50%;", name: "红色" },
+      { style: "border:1px solid #4169E1; border-radius:50%;", name: "椭圆皇家蓝" },
+      { style: "border:1px solid #32CD32; border-radius:50%;", name: "椭圆酸橙绿" },
+      { style: "border:1px solid #FF8C00; border-radius:50%;", name: "椭圆深橙色" },
+      { style: "border:1px solid #9370DB; border-radius:50%;", name: "椭圆中紫色" },
+      { style: "border:1px solid #FF1493; border-radius:50%;", name: "椭圆深粉红" },
+
       { style: "border:3px double #FF6347;", name: "番茄红" },
-      { style: "border:3px double #20B2AA;", name: "浅海绿" },
       { style: "border:3px double #FF8C00;", name: "深橙色" },
       { style: "border:3px double #9370DB;", name: "中紫色" },
       { style: "border:3px double #DC143C;", name: "猩红色" },
-      { style: "border:3px double #00CED1;", name: "深青色" },
       { style: "border:3px double #FFB6C1;", name: "浅粉红" },
-      { style: "border:1px solid black; box-shadow:0 0 5px red;", name: "发光红" },
-      { style: "border:1px solid black; box-shadow:0 0 4px blue;", name: "发光蓝" },
-      { style: "border:1px solid black; box-shadow:0 0 5px #00ff00;", name: "发光绿" },
-      { style: "border:1px solid black; box-shadow:0 0 6px #ff00ff;", name: "发光洋红" },
-      { style: "border:1px solid black; box-shadow:0 0 5px #ffff00;", name: "发光黄" },
-      { style: "border:1px solid black; box-shadow:0 0 5px #00ffff;", name: "发光青" },
-      { style: "border:1px solid black; box-shadow:0 0 6px #ff6600;", name: "发光橙" },
-      { style: "border:1px solid black; box-shadow:0 0 5px #9370DB;", name: "发光紫" },
-      { style: "border:1px solid black; box-shadow:0 0 8px #FFD700;", name: "发光金" },
-      { style: "border:1px solid transparent; border-image: linear-gradient(45deg, blue, pink, purple) 1;", name: "蓝粉紫" },
-      { style: "border:1px solid transparent; border-image: linear-gradient(45deg, #ff0000, #ffff00, #00ff00) 1;", name: "红黄绿" },
-      { style: "border:1px solid transparent; border-image: linear-gradient(45deg, #00d4ff, #7b68ee, #ff1493) 1;", name: "天蓝紫粉" },
-      { style: "border:1px solid transparent; border-image: linear-gradient(45deg, orange, red, purple) 1;", name: "橙红紫" },
-      { style: "border:1px solid transparent; border-image: linear-gradient(45deg, #00ff00, #00ffff, #0000ff) 1;", name: "绿青蓝" },
-      { style: "border:1px solid transparent; border-image: linear-gradient(45deg, gold, orange, red) 1;", name: "金橙红" },
-      { style: "border:1px solid transparent; border-image: linear-gradient(90deg, #e91e63, #9c27b0, #673ab7) 1;", name: "玫红紫系" },
+
+      { style: "border:1px dashed blue;", name: "蓝色" },
+      { style: "border:1px dashed #DC143C;", name: "猩红色" },
+
+      { style: "border:2px dotted green;", name: "绿色" },
+      { style: "border:2px dotted #FF6347;", name: "番茄红" },
+
+      { style: "border:1px solid red; box-shadow:0 0 5px red;", name: "发光红" },
+      { style: "border:1px solid blue; box-shadow:0 0 4px blue;", name: "发光蓝" },
+
+
+      { style: "border:1px solid transparent; border-image: linear-gradient(45deg, #00d4ff, #A6A5A8FF, #ff1493) 1;", name: "天蓝紫粉" },
+
       { style: "border-bottom:3px solid blue;", name: "蓝色" },
       { style: "border-bottom:3px solid #FF4500;", name: "橙红色" },
       { style: "border-bottom:3px solid #32CD32;", name: "酸橙绿" },
@@ -2176,48 +2276,31 @@ class PaletteModal extends Modal {
       { style: "border-bottom:3px solid #9370DB;", name: "中紫色" },
       { style: "border-bottom:3px solid #FFD700;", name: "金色" },
       { style: "border-bottom:3px solid #00CED1;", name: "深青色" },
-      { style: "border-left:5px solid orange;", name: "橙色" },
-      { style: "border-left:5px solid #DC143C;", name: "猩红色" },
-      { style: "border-left:5px solid #20B2AA;", name: "浅海绿" },
-      { style: "border-left:5px solid #4169E1;", name: "皇家蓝" },
-      { style: "border-left:5px solid #9932CC;", name: "深兰花紫" },
-      { style: "border-left:5px solid #FF69B4;", name: "热粉红" },
-      { style: "border-left:5px solid #00FA9A;", name: "中春绿" },
-      { style: "border:1px solid red; border-radius:8px;", name: "红色" },
-      { style: "border:1px solid #4169E1; border-radius:8px;", name: "皇家蓝" },
-      { style: "border:1px solid #32CD32; border-radius:8px;", name: "酸橙绿" },
-      { style: "border:1px solid #FF8C00; border-radius:8px;", name: "深橙色" },
-      { style: "border:1px solid #9370DB; border-radius:8px;", name: "中紫色" },
-      { style: "border:1px solid #FF1493; border-radius:8px;", name: "深粉红" },
-      { style: "border:1px solid #00CED1; border-radius:8px;", name: "深青色" },
-      { style: "border:1px solid red; border-radius:20px;", name: "红色" },
-      { style: "border:1px solid #228B22; border-radius:20px;", name: "森林绿" },
-      { style: "border:1px solid #FF6347; border-radius:20px;", name: "番茄红" },
-      { style: "border:1px solid #8A2BE2; border-radius:20px;", name: "紫罗兰" },
-      { style: "border:1px solid #FFD700; border-radius:20px;", name: "金色" },
-      { style: "border:1px solid #00CED1; border-radius:20px;", name: "深青色" },
-      { style: "border:1px solid red; border-radius:50%;", name: "红色" },
-      { style: "border:1px solid #4169E1; border-radius:50%;", name: "皇家蓝" },
-      { style: "border:1px solid #32CD32; border-radius:50%;", name: "酸橙绿" },
-      { style: "border:1px solid #FF8C00; border-radius:50%;", name: "深橙色" },
-      { style: "border:1px solid #9370DB; border-radius:50%;", name: "中紫色" },
-      { style: "border:1px solid #FF1493; border-radius:50%;", name: "深粉红" },
-      { style: "border:1px dashed blue;", name: "蓝色" },
-      { style: "border:1px dashed #DC143C;", name: "猩红色" },
-      { style: "border:1px dashed #32CD32;", name: "酸橙绿" },
-      { style: "border:1px dashed #FF8C00;", name: "深橙色" },
-      { style: "border:1px dashed #8A2BE2;", name: "紫罗兰" },
-      { style: "border:1px dashed #FF1493;", name: "深粉红" },
-      { style: "border:1px dashed #00CED1;", name: "深青色" },
-      { style: "border:1px dashed #FFD700;", name: "金色" },
-      { style: "border:2px dotted green;", name: "绿色" },
-      { style: "border:2px dotted #FF6347;", name: "番茄红" },
-      { style: "border:2px dotted #4169E1;", name: "皇家蓝" },
-      { style: "border:2px dotted #FF8C00;", name: "深橙色" },
-      { style: "border:2px dotted #9370DB;", name: "中紫色" },
-      { style: "border:2px dotted #FF1493;", name: "深粉红" },
-      { style: "border:2px dotted #00CED1;", name: "深青色" },
-      { style: "border:2px dotted #FFD700;", name: "金色" }
+  
+
+      { style: "text-shadow: 2px 2px 4px red, -2px -2px 4px cyan;", name: "多层阴影" },    
+      { style: "text-shadow: 2px 2px 4px Orange, -2px -2px 4px white;", name: "多层阴影" },
+      { style: "text-shadow: 2px 2px 4px #00CED1, -2px -2px 4px Yellow;", name: "多层阴影" },
+      { style: "text-shadow: 2px 2px 4px green, -2px -2px 4px white;", name: "多层阴影" },
+      { style: "text-shadow: 2px 2px 4px cyan, -2px -2px 4px white;", name: "多层阴影" },
+      { style: "text-shadow: 2px 2px 4px blue, -2px -2px 4px white;", name: "多层阴影" },
+      { style: "text-shadow: 2px 2px 4px purple, -2px -2px 4px white;", name: "多层阴影" },
+      { style: "text-shadow: 2px 2px 4px #FF69B4, -2px -2px 4px white;", name: "多层阴影" },
+
+      { style: "-webkit-text-stroke: 0.2px red; color: blue;", name: "描边文字" },
+      { style: "-webkit-text-stroke: 0.2px Orange; color: blue;", name: "描边文字" },
+      { style: "-webkit-text-stroke: 0.2px yellow; color: green;", name: "描边文字" },
+      { style: "-webkit-text-stroke: 0.2px cyan; color: blue;", name: "描边文字" },
+      { style: "-webkit-text-stroke: 0.2px blue; color: blue;", name: "描边文字" },
+      { style: "-webkit-text-stroke: 0.2px purple; color: blue;", name: "描边文字" },
+      { style: "-webkit-text-stroke: 0.8px #CFC3AA; color: #6F370C;", name: "描边文字" },
+
+
+
+
+
+
+
     ];
     
     // 渲染边框样式按钮
@@ -2233,7 +2316,7 @@ class PaletteModal extends Modal {
       btn.style.padding = "0 8px";
       btn.style.margin = "0";
       btn.style.fontSize = "14px";
-      btn.title = borderStyle.name + " (点击应用)";
+      btn.title = borderStyle.name + " (点击应用,右击应用到全部)";
       // 获取当前选中的文本，如果没有则显示"示例"
       let displayText = "示例"; // 默认显示"示例"
       if (this.app.workspace.activeLeaf && this.app.workspace.activeLeaf.view && this.app.workspace.activeLeaf.view.editor) {
@@ -3320,7 +3403,16 @@ class PaletteModal extends Modal {
           item.style.color = "inherit";
         } else {
           // 优先使用fullStyle
-          if (h.fullStyle) {
+          if (h.fullStyle === "bold") {
+            // 加粗样式
+            item.style.fontWeight = "bold";
+            item.innerText = h.text.length > 16 ? h.text.slice(0, 16) + "..." : h.text;
+          } else if (h.fullStyle === "link") {
+            // 链接样式
+            item.style.color = "#0066cc";
+            item.style.textDecoration = "underline";
+            item.innerText = h.text.length > 16 ? h.text.slice(0, 16) + "..." : h.text;
+          } else if (h.fullStyle) {
             // 解析fullStyle中的样式并应用
             const styleParts = h.fullStyle.split(';');
             styleParts.forEach(part => {
@@ -3329,12 +3421,13 @@ class PaletteModal extends Modal {
                 item.style[prop.replace(/-([a-z])/g, g => g[1].toUpperCase())] = value;
               }
             });
+            item.innerText = h.text.length > 16 ? h.text.slice(0, 16) + "..." : h.text;
           } else {
             // 如果没有fullStyle，回退到原有渲染方式
             item.style.background = h.bgColor;
             item.style.color = h.textColor;
+            item.innerText = h.text.length > 16 ? h.text.slice(0, 16) + "..." : h.text;
           }
-          item.innerText = h.text.length > 16 ? h.text.slice(0, 16) + "..." : h.text;
         }
         item.title = h.text;
         item.addEventListener("click", () => {
@@ -3371,6 +3464,15 @@ class PaletteModal extends Modal {
             // 同时匹配span和mark标签
             const tagReg = new RegExp(`<(span|mark)[^>]*>\\s*${escText}\\s*</\\1>`, "gi");
             let newContent = content.replace(tagReg, h.text);
+            
+            // 处理加粗格式 (**text**)
+            const boldReg = new RegExp(`\\*\\*\\s*${escText}\\s*\\*\\*`, "gi");
+            newContent = newContent.replace(boldReg, h.text);
+            
+            // 处理链接格式 ([[text]])
+            const linkReg = new RegExp(`\\[\\[\\s*${escText}\\s*\\]\\]`, "gi");
+            newContent = newContent.replace(linkReg, h.text);
+            
             const oldCursor = editor.getCursor();
             const oldScroll = editor.getScrollInfo ? editor.getScrollInfo() : null;
             editor.setValue(newContent);
