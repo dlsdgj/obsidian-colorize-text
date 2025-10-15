@@ -15,6 +15,13 @@ module.exports = class ColorizeTextPlugin extends Plugin {
       console.error('初始化日志失败:', err);
     }
     
+    // 测试控制台输出
+    console.log('=== ColorizeText 插件加载测试 ===');
+    console.log('ColorizeText: 控制台测试 - 如果你看到这条消息，说明控制台正常工作');
+    console.log('ColorizeText: 插件版本: 1.0.0');
+    console.log('ColorizeText: 当前时间:', new Date().toISOString());
+    console.log('=== 控制台测试结束 ===');
+    
     // 首先立即创建设置对象，确保它在插件启动时就存在
     this.settings = {
       apiKey: "",
@@ -142,30 +149,92 @@ module.exports = class ColorizeTextPlugin extends Plugin {
         console.log('ColorizeText: 最终加载的settings:', this.settings);
       }
       
-      // 挂载到全局，供弹窗回调使用
-      window.colorizeTextPluginInstance = this;
-      
-      // 添加文件重命名事件监听器
-      this.registerEvent(
-        this.app.vault.on('rename', async (file, oldPath) => {
-          try {
-            await this.handleFileRename(file, oldPath);
-          } catch (error) {
-            console.error('处理文件重命名失败:', error);
+    // 挂载到全局，供弹窗回调使用
+    window.colorizeTextPluginInstance = this;
+    
+    // 添加全局鼠标点击事件监听器来记录光标位置
+    this.registerEvent(
+      this.app.workspace.on('editor-click', (editor, view) => {
+        try {
+          const cursor = editor.getCursor();
+          const lineCount = editor.lineCount();
+          console.log(`ColorizeText: 鼠标左键点击 - 当前行: ${cursor.line}, 列: ${cursor.ch}, 总行数: ${lineCount}`);
+          
+          // 获取当前行内容
+          const lineContent = editor.getLine(cursor.line);
+          console.log(`ColorizeText: 当前行内容: "${lineContent}"`);
+          
+          // 获取选中的文本（如果有）
+          const selectedText = editor.getSelection();
+          if (selectedText) {
+            console.log(`ColorizeText: 选中文本: "${selectedText}"`);
           }
-        })
-      )
+        } catch (error) {
+          console.error('ColorizeText: 记录鼠标点击位置失败:', error);
+        }
+      })
+    );
+    
+    // 添加右键点击事件监听器来记录光标位置
+    this.registerEvent(
+      this.app.workspace.on('editor-context-menu', (editor, view) => {
+        try {
+          const cursor = editor.getCursor();
+          const lineCount = editor.lineCount();
+          console.log(`ColorizeText: 鼠标右键点击 - 当前行: ${cursor.line}, 列: ${cursor.ch}, 总行数: ${lineCount}`);
+          
+          // 获取当前行内容
+          const lineContent = editor.getLine(cursor.line);
+          console.log(`ColorizeText: 当前行内容: "${lineContent}"`);
+          
+          // 获取选中的文本（如果有）
+          const selectedText = editor.getSelection();
+          if (selectedText) {
+            console.log(`ColorizeText: 选中文本: "${selectedText}"`);
+          }
+        } catch (error) {
+          console.error('ColorizeText: 记录鼠标右键点击位置失败:', error);
+        }
+      })
+    );
+    
+    // 添加光标位置变化监听器
+    this.registerEvent(
+      this.app.workspace.on('editor-change', (editor, view) => {
+        try {
+          const cursor = editor.getCursor();
+          // 只在行号变化时记录，避免过多日志
+          if (this.lastCursorLine !== cursor.line) {
+            console.log(`ColorizeText: 光标移动到第 ${cursor.line} 行, 列: ${cursor.ch}`);
+            this.lastCursorLine = cursor.line;
+          }
+        } catch (error) {
+          console.error('ColorizeText: 记录光标移动失败:', error);
+        }
+      })
+    );
+    
+    // 添加文件重命名事件监听器
+    this.registerEvent(
+      this.app.vault.on('rename', async (file, oldPath) => {
+        try {
+          await this.handleFileRename(file, oldPath);
+        } catch (error) {
+          console.error('处理文件重命名失败:', error);
+        }
+      })
+    )
 
-      // 添加文件删除事件监听器
-      this.registerEvent(
-        this.app.vault.on('delete', async (file) => {
-          try {
-            await this.handleFileDelete(file);
-          } catch (error) {
-            console.error('处理文件删除失败:', error);
-          }
-        })
-      );
+    // 添加文件删除事件监听器
+    this.registerEvent(
+      this.app.vault.on('delete', async (file) => {
+        try {
+          await this.handleFileDelete(file);
+        } catch (error) {
+          console.error('处理文件删除失败:', error);
+        }
+      })
+    );
     } catch (error) {
       console.error("ColorizeText: onload方法发生严重错误导致插件卸载:", error);
       console.error("ColorizeText: 错误堆栈:", error.stack);
@@ -236,6 +305,102 @@ module.exports = class ColorizeTextPlugin extends Plugin {
     }
   }
   
+  // 将光标所在行居中显示的方法 - 基于simple-goto-line插件的实现
+  centerCursorInEditor(editor) {
+    try {
+      const cursor = editor.getCursor();
+      const lineCount = editor.lineCount();
+      
+      console.log(`ColorizeText: 开始居中光标 - 当前行: ${cursor.line}, 总行数: ${lineCount}`);
+      
+      // 关键优化：先聚焦编辑器，再进行其他操作
+      editor.focus();
+      
+      const lineIndex = cursor.line;
+      
+      if (lineIndex >= 0 && lineIndex < editor.lineCount()) {
+        // 改进的滚动逻辑，确保目标行显示在视口中间
+        try {
+          // 尝试使用更精确的滚动方法
+          if (typeof editor.cm?.scrollIntoView === 'function') {
+            // CodeMirror编辑器
+            editor.cm.scrollIntoView({
+              line: lineIndex,
+              ch: cursor.ch
+            }, 0.5); // 0.5表示居中
+            console.log(`ColorizeText: 使用CodeMirror scrollIntoView居中，行: ${lineIndex + 1}`);
+          } else if (typeof editor.scrollIntoView === 'function') {
+            // 备用方案：使用scrollIntoView并尝试居中
+            const editorEl = editor.domElement?.closest('.cm-editor')?.querySelector('.cm-scroller');
+            if (editorEl) {
+              // 近似计算居中滚动位置
+              const lineHeight = editor.defaultLineHeight || 20; // 近似行高
+              const viewportHeight = editorEl.clientHeight;
+              const scrollInfo = editor.getScrollInfo?.();
+              const currentScrollTop = scrollInfo?.top || 0;
+              const targetScroll = currentScrollTop + (lineIndex * lineHeight) - (viewportHeight / 2) + (lineHeight / 2);
+              
+              console.log(`ColorizeText: 计算滚动位置 - 行高: ${lineHeight}, 视口高度: ${viewportHeight}, 当前滚动: ${currentScrollTop}, 目标滚动: ${targetScroll}`);
+              
+              // 使用setTimeout确保在光标设置后执行滚动
+              setTimeout(() => {
+                try {
+                  editor.scrollTo(0, targetScroll);
+                  console.log(`ColorizeText: 使用计算滚动位置居中完成，行: ${lineIndex + 1}`);
+                } catch (scrollError) {
+                  console.error('ColorizeText: 计算滚动失败:', scrollError);
+                  // 最终备用方案
+                  editor.scrollIntoView({
+                    from: { line: lineIndex, ch: cursor.ch },
+                    to: { line: lineIndex, ch: cursor.ch }
+                  }, true);
+                  console.log(`ColorizeText: 使用备用scrollIntoView，行: ${lineIndex + 1}`);
+                }
+              }, 50);
+            } else {
+              // 最终备用方案
+              editor.scrollIntoView({
+                from: { line: lineIndex, ch: cursor.ch },
+                to: { line: lineIndex, ch: cursor.ch }
+              }, true);
+              console.log(`ColorizeText: 使用最终备用scrollIntoView，行: ${lineIndex + 1}`);
+            }
+          }
+        } catch (scrollError) {
+          console.error('ColorizeText: 滚动错误:', scrollError);
+          // 最终备用方案
+          editor.scrollIntoView({
+            from: { line: lineIndex, ch: cursor.ch },
+            to: { line: lineIndex, ch: cursor.ch }
+          }, true);
+          console.log(`ColorizeText: 使用错误处理备用scrollIntoView，行: ${lineIndex + 1}`);
+        }
+        
+        console.log(`ColorizeText: 光标行已居中，当前行: ${lineIndex + 1}`);
+      } else {
+        console.error('ColorizeText: 无效的行号:', lineIndex);
+      }
+    } catch (error) {
+      console.error("ColorizeText: 居中光标失败:", error);
+      console.error("ColorizeText: 错误详情:", error.stack);
+      // 即使出错也只尝试最基本的操作
+      try {
+        const cursor = editor.getCursor();
+        editor.focus();
+        console.log(`ColorizeText: 尝试基础聚焦和滚动到光标位置，行: ${cursor.line}`);
+        // 简单的滚动到光标位置
+        editor.scrollIntoView({
+          from: { line: cursor.line, ch: cursor.ch }, 
+          to: { line: cursor.line, ch: cursor.ch }
+        }, true);
+        console.log(`ColorizeText: 基础滚动完成`);
+      } catch (fallbackError) {
+        console.error("ColorizeText: 基础滚动也失败:", fallbackError);
+        console.error("ColorizeText: 基础滚动错误详情:", fallbackError.stack);
+      }
+    }
+  }
+
   // 将当前文件中与高亮历史关键词相同的文本应用相同颜色
   async applyHighlightHistoryToCurrentFile(editor) {
     const filePath = this.app.workspace.getActiveFile()?.path || "__unknown__";
@@ -245,6 +410,10 @@ module.exports = class ColorizeTextPlugin extends Plugin {
       new Notice("无法获取当前文件路径");
       return;
     }
+    
+    // 记录应用高亮前的光标位置
+    const beforeCursor = editor.getCursor();
+    console.log(`ColorizeText: 应用历史高亮前 - 当前行: ${beforeCursor.line}, 列: ${beforeCursor.ch}`);
     
     console.log("ColorizeText: 当前文件路径:", filePath);
     console.log("ColorizeText: 对应高亮历史文件:", this.getHighlightFileName(filePath));
@@ -266,15 +435,25 @@ module.exports = class ColorizeTextPlugin extends Plugin {
       const oldCursor = editor.getCursor();
       const oldScroll = editor.getScrollInfo ? editor.getScrollInfo() : null;
       
+      console.log(`ColorizeText: 应用历史高亮前记录的光标位置 - 行: ${oldCursor.line}, 列: ${oldCursor.ch}`);
+      
       editor.setValue(result.processedContent);
       
       // 恢复光标位置和滚动位置
       if (oldCursor) {
         editor.setCursor(oldCursor);
+        console.log(`ColorizeText: 应用历史高亮后恢复光标位置 - 行: ${oldCursor.line}, 列: ${oldCursor.ch}`);
       }
       if (oldScroll && editor.scrollTo) {
         editor.scrollTo(oldScroll.left, oldScroll.top);
       }
+      
+      // 应用高亮后将光标所在行居中显示
+      setTimeout(() => {
+        const afterCursor = editor.getCursor();
+        console.log(`ColorizeText: 准备居中光标时的光标位置 - 行: ${afterCursor.line}, 列: ${afterCursor.ch}`);
+        this.centerCursorInEditor(editor);
+      }, 100); // 稍微延迟以确保DOM更新完成
       
       new Notice(`已应用 ${result.appliedCount} 处高亮`);
     } else {
@@ -1070,6 +1249,20 @@ module.exports = class ColorizeTextPlugin extends Plugin {
         }
         
         editor.replaceSelection(wrapped);
+        
+        // 记录应用高亮后的光标位置
+        const afterReplaceCursor = editor.getCursor();
+        console.log(`ColorizeText: 颜色板应用高亮后 - 当前行: ${afterReplaceCursor.line}, 列: ${afterReplaceCursor.ch}`);
+        
+        // 应用高亮后将光标所在行居中显示
+        setTimeout(() => {
+          const beforeCenterCursor = editor.getCursor();
+          console.log(`ColorizeText: 颜色板准备居中光标时的光标位置 - 行: ${beforeCenterCursor.line}, 列: ${beforeCenterCursor.ch}`);
+          if (window.colorizeTextPluginInstance) {
+            window.colorizeTextPluginInstance.centerCursorInEditor(editor);
+          }
+        }, 100); // 稍微延迟以确保DOM更新完成
+        
         // 保存高亮历史
         const newRecord = {
           text: selectedText,
@@ -2165,14 +2358,35 @@ class PaletteModal extends Modal {
           
             // 确保编辑器存在且内容已修改
             if (replaced) {
+              // 记录应用高亮前的光标位置
+              const beforeCursor = editor.getCursor();
+              console.log(`ColorizeText: 右键应用高亮前 - 当前行: ${beforeCursor.line}, 列: ${beforeCursor.ch}`);
+              
               // 记录原光标和滚动条位置
               const oldCursor = editor.getCursor();
               const oldScroll = editor.getScrollInfo ? editor.getScrollInfo() : null;
+              
+              console.log(`ColorizeText: 右键应用高亮前记录的光标位置 - 行: ${oldCursor.line}, 列: ${oldCursor.ch}`);
+              
               editor.setValue(newContent);
+              
               // 恢复光标
-              if (oldCursor) editor.setCursor(oldCursor);
+              if (oldCursor) {
+                editor.setCursor(oldCursor);
+                console.log(`ColorizeText: 右键应用高亮后恢复光标位置 - 行: ${oldCursor.line}, 列: ${oldCursor.ch}`);
+              }
               // 恢复滚动条
               if (oldScroll && editor.scrollTo) editor.scrollTo(oldScroll.left, oldScroll.top);
+              
+              // 应用高亮后将光标所在行居中显示
+              setTimeout(() => {
+                const afterCursor = editor.getCursor();
+                console.log(`ColorizeText: 右键应用高亮准备居中光标时的光标位置 - 行: ${afterCursor.line}, 列: ${afterCursor.ch}`);
+                if (window.colorizeTextPluginInstance) {
+                  window.colorizeTextPluginInstance.centerCursorInEditor(editor);
+                }
+              }, 100); // 稍微延迟以确保DOM更新完成
+              
               // 保存高亮历史
               const filePath = this.app.workspace.getActiveFile()?.path || "__unknown__";
               if (window.colorizeTextPluginInstance) {
@@ -2278,14 +2492,78 @@ class PaletteModal extends Modal {
       { style: "border-bottom:3px solid #00CED1;", name: "深青色" },
   
 
-      { style: "text-shadow: 2px 2px 4px red, -2px -2px 4px cyan;", name: "多层阴影" },    
+
+      { style: "text-shadow: 2px 2px 4px red, -2px -2px 4px cyan;", name: "Tiktok" },
+      { style: "text-shadow: 2px 2px 4px #32F08C, -2px -2px 4px #7255B0; color: black;", name: "ghost" },
+      { style: "text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 15px #FF1493, 0 0 20px #FF1493, 0 0 25px #FF1493, 0 0 30px #FF1493, 0 0 35px #FF1493; color: white;", name: "Neon Pink" },
+      { style: "text-shadow: 1px 1px 2px black, 0 0 1em blue, 0 0 0.2em blue; color: white;", name: "Deep Blue Glow" },
+      { style: "text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; color: yellow;", name: "Outline/Stamp" },
+      { style: "text-shadow: 1px 1px 1px #ccc, 2px 2px 1px #ddd, 3px 3px 1px #eee; color: #555;", name: "Layered 3D" },
+
+
+      { style: "text-shadow: 2px 2px 4px #FFD93D, -2px -2px 4px #6BCB77; color: #2D4059;", name: "sunshine" },
+      { style: "text-shadow: 2px 2px 4px #00B4DB, -2px -2px 4px #0083B0; color: white;", name: "ocean" },
+      { style: "text-shadow: 2px 2px 4px #F093FB, -2px -2px 4px #74000FFF;", name: "sunset" },
+      { style: "text-shadow: 2px 2px 4px #FFA400, -2px -2px 4px #00D9FF; color: black;", name: "neon" },
+      { style: "text-shadow: 2px 2px 4px #59BB97FF, -2px -2px 4px #C9A58DFF; color: #3A3A3A;", name: "pastel" },
+      { style: "text-shadow: 2px 2px 4px #DA22FF, -2px -2px 4px #9733EE;", name: "purple" },
+
+
       { style: "text-shadow: 2px 2px 4px Orange, -2px -2px 4px white;", name: "多层阴影" },
       { style: "text-shadow: 2px 2px 4px #00CED1, -2px -2px 4px Yellow;", name: "多层阴影" },
       { style: "text-shadow: 2px 2px 4px green, -2px -2px 4px white;", name: "多层阴影" },
       { style: "text-shadow: 2px 2px 4px cyan, -2px -2px 4px white;", name: "多层阴影" },
       { style: "text-shadow: 2px 2px 4px blue, -2px -2px 4px white;", name: "多层阴影" },
       { style: "text-shadow: 2px 2px 4px purple, -2px -2px 4px white;", name: "多层阴影" },
-      { style: "text-shadow: 2px 2px 4px #FF69B4, -2px -2px 4px white;", name: "多层阴影" },
+      { style: "text-shadow: 2px 2px 4px #FF69B4, -2px -2px 4px white;", name: "多层阴影" }, 
+      { style: "text-shadow: 2px 2px 4px #58BCFF, -2px -2px 4px white;", name: "多层阴影" },
+
+      { style: "text-shadow: 2px 2px 4px #1A1B1D, -2px -2px 4px #C9481E; color: #FFD700;", name: "多层阴影" },
+     
+// 火焰效果
+{ style: "text-shadow: 0 0 4px #fff, 0 0 11px #fff, 0 0 19px #fff, 0 0 40px #ff9900, 0 0 80px #ff6600, 0 0 90px #ff4500, 0 0 100px #ff0000; color: #FFA500;", name: "Fire" },
+
+// 冰霜效果
+{ style: "text-shadow: 0 0 5px #00f5ff, 0 0 10px #00f5ff, 0 0 20px #00d4ff, 0 0 40px #00aaff; color: #e0ffff;", name: "Ice" },
+
+// 金属质感
+{ style: "text-shadow: -1px -1px 0 #c9c9c9, 1px 1px 0 #fff, 2px 2px 0 #c9c9c9, 3px 3px 0 #b0b0b0; color: #e8e8e8;", name: "Chrome" },
+
+// 毛玻璃模糊
+//{ style: "text-shadow: 0 0 10px rgba(255,255,255,0.8), 0 0 20px rgba(255,255,255,0.6), 0 0 30px rgba(255,255,255,0.4); color: rgba(255,255,255,0.3); font-weight: bold;", name: "Frosted Glass" },
+
+// 彩虹渐变
+{ style: "text-shadow: 1px 1px 0 #f00, 2px 2px 0 #ff0, 3px 3px 0 #0f0, 4px 4px 0 #0ff, 5px 5px 0 #00f, 6px 6px 0 #f0f; color: white;", name: "Rainbow" },
+
+// 浮雕效果
+{ style: "text-shadow: 1px 1px 0 #fff, -1px -1px 0 #000; color: #999;", name: "Emboss" },
+
+// 镂空效果
+{ style: "text-shadow: 1px 1px 0 #000, -1px -1px 0 #fff, 1px -1px 0 #000, -1px 1px 0 #fff; color: transparent; -webkit-text-stroke: 1px #333;", name: "Hollow" },
+
+// 复古霓虹
+{ style: "text-shadow: 0 0 10px #ff006e, 0 0 20px #ff006e, 0 0 30px #ff006e, 0 0 40px #8338ec, 0 0 70px #8338ec, 0 0 80px #8338ec; color: #ffbe0b;", name: "Retro Neon" },
+
+// 阴影分离
+//{ style: "text-shadow: 3px 3px 0 rgba(255,0,0,0.5), 6px 6px 0 rgba(0,255,0,0.5), 9px 9px 0 rgba(0,0,255,0.5); color: white;", name: "RGB Split" },
+
+// 柔和发光
+{ style: "text-shadow: 0 0 20px rgba(255,215,0,0.8), 0 0 40px rgba(255,215,0,0.6), 0 0 60px rgba(255,215,0,0.4); color: #FFD700;", name: "Soft Glow" },
+
+// 像素故障
+{ style: "text-shadow: 2px 0 0 red, -2px 0 0 cyan, 0 2px 0 yellow, 0 -2px 0 lime; color: white;", name: "Pixel Glitch" },
+
+// 激光效果
+{ style: "text-shadow: 0 0 2px #fff, 0 0 5px #00ff00, 0 0 10px #00ff00, 0 0 20px #00ff00, 0 0 40px #00ff00; color: #4E9E4EFF;", name: "Laser Green" },
+
+// 水波纹
+{ style: "text-shadow: 0 1px 0 #84fab0, 0 2px 0 #8fd3f4, 0 3px 0 #84fab0, 0 4px 0 #8fd3f4, 0 5px 10px rgba(0,0,0,0.5); color: white;", name: "Water Wave" },
+
+// 血迹效果
+{ style: "text-shadow: 2px 2px 3px #8b0000, -1px -1px 2px #ff0000, 0 0 10px #8b0000; color: #dc143c;", name: "Blood" },
+
+// 电光效果
+{ style: "text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 15px #00ffff, 0 0 20px #00ffff, 0 0 35px #00ffff, 2px 2px 5px #000; color: white;", name: "Electric" },
 
       { style: "-webkit-text-stroke: 0.2px red; color: blue;", name: "描边文字" },
       { style: "-webkit-text-stroke: 0.2px Orange; color: blue;", name: "描边文字" },
@@ -2293,7 +2571,7 @@ class PaletteModal extends Modal {
       { style: "-webkit-text-stroke: 0.2px cyan; color: blue;", name: "描边文字" },
       { style: "-webkit-text-stroke: 0.2px blue; color: blue;", name: "描边文字" },
       { style: "-webkit-text-stroke: 0.2px purple; color: blue;", name: "描边文字" },
-      { style: "-webkit-text-stroke: 0.8px #CFC3AA; color: #6F370C;", name: "描边文字" },
+      { style: "-webkit-text-stroke: 0.8px #CFC3AA; color: #968700FF;", name: "描边文字" },
 
 
 
@@ -2397,18 +2675,34 @@ class PaletteModal extends Modal {
             );
             
             if (hasChanges) {
+              // 记录应用高亮前的光标位置
+              const beforeCursor = editor.getCursor();
+              console.log(`ColorizeText: 边框样式右键应用高亮前 - 当前行: ${beforeCursor.line}, 列: ${beforeCursor.ch}`);
+              
               const oldCursor = editor.getCursor();
               const oldScroll = editor.getScrollInfo ? editor.getScrollInfo() : null;
+              
+              console.log(`ColorizeText: 边框样式右键应用高亮前记录的光标位置 - 行: ${oldCursor.line}, 列: ${oldCursor.ch}`);
               
               editor.setValue(processedContent);
               
               // 恢复光标位置和滚动位置
               if (oldCursor) {
                 editor.setCursor(oldCursor);
+                console.log(`ColorizeText: 边框样式右键应用高亮后恢复光标位置 - 行: ${oldCursor.line}, 列: ${oldCursor.ch}`);
               }
               if (oldScroll && editor.scrollTo) {
                 editor.scrollTo(oldScroll.left, oldScroll.top);
               }
+              
+              // 应用高亮后将光标所在行居中显示
+              setTimeout(() => {
+                const afterCursor = editor.getCursor();
+                console.log(`ColorizeText: 边框样式右键应用高亮准备居中光标时的光标位置 - 行: ${afterCursor.line}, 列: ${afterCursor.ch}`);
+                if (window.colorizeTextPluginInstance) {
+                  window.colorizeTextPluginInstance.centerCursorInEditor(editor);
+                }
+              }, 100); // 稍微延迟以确保DOM更新完成
               
               // 保存高亮历史
               const filePath = this.app.workspace.getActiveFile()?.path || "__unknown__";
@@ -3263,11 +3557,22 @@ class PaletteModal extends Modal {
                 return `<span style="${fullStyle}">${matchText}</span>`;
               });
               if (replaced) {
-                const oldCursor = editor.getCursor();
-                const oldScroll = editor.getScrollInfo ? editor.getScrollInfo() : null;
-                editor.setValue(newContent);
-                if (oldCursor) editor.setCursor(oldCursor);
-                if (oldScroll && editor.scrollTo) editor.scrollTo(oldScroll.left, oldScroll.top);
+            // 记录移除高亮前的光标位置
+            const beforeCursor = editor.getCursor();
+            console.log(`ColorizeText: 中键移除高亮前 - 当前行: ${beforeCursor.line}, 列: ${beforeCursor.ch}`);
+            
+            const oldCursor = editor.getCursor();
+            const oldScroll = editor.getScrollInfo ? editor.getScrollInfo() : null;
+            
+            console.log(`ColorizeText: 中键移除高亮前记录的光标位置 - 行: ${oldCursor.line}, 列: ${oldCursor.ch}`);
+            
+            editor.setValue(newContent);
+            
+            if (oldCursor) {
+              editor.setCursor(oldCursor);
+              console.log(`ColorizeText: 中键移除高亮后恢复光标位置 - 行: ${oldCursor.line}, 列: ${oldCursor.ch}`);
+            }
+            if (oldScroll && editor.scrollTo) editor.scrollTo(oldScroll.left, oldScroll.top);
                 // 添加到高亮历史
                 const filePath = this.app.workspace.getActiveFile()?.path || "__unknown__";
                 if (window.colorizeTextPluginInstance) {

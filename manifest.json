@@ -1,10 +1,10 @@
 {
   "id": "colorize-text",
   "name": "Colorize Text",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "minAppVersion": "0.15.0",
-  "description": "为选中的文字添加文字颜色和背景色。",
-  "author": "你的名字",
+  "description": "为选中的文字添加文字颜色和背景色。支持智能光标居中、多种高亮样式、AI配色生成和完整的历史记录管理。",
+  "author": "nilmarko",
   "authorUrl": "https://github.com/",
   "isDesktopOnly": false,
   "settings": {
